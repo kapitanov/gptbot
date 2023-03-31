@@ -7,3 +7,5 @@ services:
         container_name: gptbot
         env_file: ./.env
         restart: always
+        volumes:
+            - ./conf:/opt/gptbot/conf

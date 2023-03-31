@@ -8,7 +8,7 @@ import (
 	"github.com/rs/zerolog/log"
 	"gopkg.in/tucnak/telebot.v2"
 
-	"github.com/kapitanov/gptbot/internal/texts"
+	"github.com/kapitanov/gptbot/internal/telegram/texts"
 )
 
 const (
