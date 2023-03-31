@@ -5,9 +5,10 @@ import (
 	"time"
 
 	"github.com/alitto/pond"
-	"github.com/kapitanov/gptbot/internal/texts"
 	"github.com/rs/zerolog/log"
 	"gopkg.in/tucnak/telebot.v2"
+
+	"github.com/kapitanov/gptbot/internal/texts"
 )
 
 const (
@@ -91,7 +92,10 @@ func (tg *Telegram) onStartCommand(msg *telebot.Message) {
 		return
 	}
 
-	tg.bot.Send(msg.Sender, texts.Welcome)
+	_, err := tg.bot.Send(msg.Sender, texts.Welcome)
+	if err != nil {
+		log.Error().Err(err).Str("username", msg.Sender.Username).Msg("failed to send welcome message")
+	}
 }
 
 func (tg *Telegram) onText(msg *telebot.Message) {
@@ -108,7 +112,11 @@ func (tg *Telegram) onPhoto(msg *telebot.Message) {
 	}
 
 	if msg.Photo.Caption == "" {
-		tg.bot.Reply(msg, texts.MissingMediaCaption)
+		log.Warn().Str("username", msg.Sender.Username).Msg("empty media caption")
+		_, err := tg.bot.Reply(msg, texts.MissingMediaCaption)
+		if err != nil {
+			log.Error().Err(err).Str("username", msg.Sender.Username).Msg("failed to send error message")
+		}
 		return
 	}
 
@@ -116,7 +124,7 @@ func (tg *Telegram) onPhoto(msg *telebot.Message) {
 }
 
 func (tg *Telegram) process(msg *telebot.Message, text string) {
-	tg.bot.Notify(msg.Sender, telebot.Typing)
+	completed := tg.notifyProcessing(msg)
 	log.Info().Str("username", msg.Sender.Username).Str("in", text).Msg("processing")
 
 	tg.workerPool.Submit(func() {
@@ -124,13 +132,42 @@ func (tg *Telegram) process(msg *telebot.Message, text string) {
 		if err != nil {
 			log.Error().Err(err).Str("username", msg.Sender.Username).Str("text", text).Msg("failed to transform text")
 
-			tg.bot.Reply(msg, texts.Failure)
+			_, err = tg.bot.Reply(msg, texts.Failure)
+			if err != nil {
+				log.Error().Err(err).Str("username", msg.Sender.Username).Msg("failed to send error message")
+			}
 			return
 		}
 
-		tg.bot.Reply(msg, transformedText)
 		log.Info().Str("username", msg.Sender.Username).Str("out", transformedText).Msg("processed")
+
+		completed()
+		_, err = tg.bot.Reply(msg, transformedText)
+		if err != nil {
+			log.Error().Err(err).Str("username", msg.Sender.Username).Msg("failed to send response message")
+		}
 	})
+}
+
+func (tg *Telegram) notifyProcessing(msg *telebot.Message) func() {
+	reply, err := tg.bot.Reply(msg, texts.Thinking, telebot.Silent)
+	if err != nil {
+		log.Error().Err(err).Str("username", msg.Sender.Username).Msg("failed to send thinking message")
+		reply = nil
+	}
+
+	tg.bot.Notify(msg.Sender, telebot.Typing)
+
+	if reply == nil {
+		return func() {}
+	}
+
+	return func() {
+		err = tg.bot.Delete(reply)
+		if err != nil {
+			log.Error().Err(err).Str("username", msg.Sender.Username).Msg("failed to delete thinking message")
+		}
+	}
 }
 
 func (tg *Telegram) hasAccess(msg *telebot.Message) bool {
@@ -138,7 +175,11 @@ func (tg *Telegram) hasAccess(msg *telebot.Message) bool {
 		return true
 	}
 
-	tg.bot.Reply(msg, texts.AccessDenied)
-	log.Warn().Str("username", msg.Sender.Username).Msg("access denied")
+	log.Error().Str("username", msg.Sender.Username).Msg("access denied")
+
+	_, err := tg.bot.Reply(msg, texts.AccessDenied)
+	if err != nil {
+		log.Error().Err(err).Str("username", msg.Sender.Username).Msg("failed to send access denied message")
+	}
 	return false
 }
