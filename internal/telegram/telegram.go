@@ -63,8 +63,13 @@ func New(options Options) (*Telegram, error) {
 	}
 
 	bot.Handle("/start", tg.onStartCommand)
-	bot.Handle(telebot.OnText, tg.onText)
-	bot.Handle(telebot.OnPhoto, tg.onPhoto)
+	bot.Handle(telebot.OnText, func(msg *telebot.Message) { tg.process(msg, msg.Text, "") })
+	bot.Handle(telebot.OnPhoto, func(msg *telebot.Message) { tg.process(msg, msg.Photo.Caption, msg.Caption) })
+	bot.Handle(telebot.OnVideo, func(msg *telebot.Message) { tg.process(msg, msg.Video.Caption, msg.Caption) })
+	bot.Handle(telebot.OnAudio, func(msg *telebot.Message) { tg.process(msg, msg.Audio.Caption, msg.Caption) })
+	bot.Handle(telebot.OnAnimation, func(msg *telebot.Message) { tg.process(msg, msg.Animation.Caption, msg.Caption) })
+	bot.Handle(telebot.OnDocument, func(msg *telebot.Message) { tg.process(msg, msg.Document.Caption, msg.Caption) })
+	bot.Handle(telebot.OnVoice, func(msg *telebot.Message) { tg.process(msg, msg.Voice.Caption, msg.Caption) })
 
 	return tg, nil
 }
@@ -94,57 +99,49 @@ func (tg *Telegram) onStartCommand(msg *telebot.Message) {
 
 	_, err := tg.bot.Send(msg.Sender, texts.Welcome)
 	if err != nil {
-		log.Error().Err(err).Str("username", msg.Sender.Username).Msg("failed to send welcome message")
+		log.Error().Err(err).Str("username", msg.Sender.Username).Int("msg", msg.ID).Msg("failed to send welcome message")
 	}
 }
 
-func (tg *Telegram) onText(msg *telebot.Message) {
+func (tg *Telegram) process(msg *telebot.Message, text, altText string) {
 	if !tg.hasAccess(msg) {
 		return
 	}
 
-	tg.process(msg, msg.Text)
-}
-
-func (tg *Telegram) onPhoto(msg *telebot.Message) {
-	if !tg.hasAccess(msg) {
-		return
+	if text == "" {
+		text = altText
 	}
+	if text == "" {
+		log.Warn().Str("username", msg.Sender.Username).Int("msg", msg.ID).Msg("empty text")
 
-	if msg.Photo.Caption == "" {
-		log.Warn().Str("username", msg.Sender.Username).Msg("empty media caption")
-		_, err := tg.bot.Reply(msg, texts.MissingMediaCaption)
+		_, err := tg.bot.Reply(msg, texts.MissingText)
 		if err != nil {
-			log.Error().Err(err).Str("username", msg.Sender.Username).Msg("failed to send error message")
+			log.Error().Err(err).Str("username", msg.Sender.Username).Int("msg", msg.ID).Msg("failed to send error message")
 		}
 		return
 	}
 
-	tg.process(msg, msg.Photo.Caption)
-}
-
-func (tg *Telegram) process(msg *telebot.Message, text string) {
 	completed := tg.notifyProcessing(msg)
 	log.Info().Str("username", msg.Sender.Username).Str("in", text).Msg("processing")
 
 	tg.workerPool.Submit(func() {
 		transformedText, err := tg.transformer.Transform(context.Background(), text)
 		if err != nil {
-			log.Error().Err(err).Str("username", msg.Sender.Username).Str("text", text).Msg("failed to transform text")
+			log.Error().Err(err).Str("username", msg.Sender.Username).Int("msg", msg.ID).Str("text", text).Msg("failed to transform text")
 
 			_, err = tg.bot.Reply(msg, texts.Failure)
 			if err != nil {
-				log.Error().Err(err).Str("username", msg.Sender.Username).Msg("failed to send error message")
+				log.Error().Err(err).Str("username", msg.Sender.Username).Int("msg", msg.ID).Msg("failed to send error message")
 			}
 			return
 		}
 
-		log.Info().Str("username", msg.Sender.Username).Str("out", transformedText).Msg("processed")
+		log.Info().Str("username", msg.Sender.Username).Int("msg", msg.ID).Str("out", transformedText).Msg("processed")
 
 		completed()
 		_, err = tg.bot.Reply(msg, transformedText)
 		if err != nil {
-			log.Error().Err(err).Str("username", msg.Sender.Username).Msg("failed to send response message")
+			log.Error().Err(err).Str("username", msg.Sender.Username).Int("msg", msg.ID).Msg("failed to send response message")
 		}
 	})
 }
@@ -152,7 +149,7 @@ func (tg *Telegram) process(msg *telebot.Message, text string) {
 func (tg *Telegram) notifyProcessing(msg *telebot.Message) func() {
 	reply, err := tg.bot.Reply(msg, texts.Thinking, telebot.Silent)
 	if err != nil {
-		log.Error().Err(err).Str("username", msg.Sender.Username).Msg("failed to send thinking message")
+		log.Error().Err(err).Str("username", msg.Sender.Username).Int("msg", msg.ID).Msg("failed to send thinking message")
 		reply = nil
 	}
 
@@ -165,7 +162,7 @@ func (tg *Telegram) notifyProcessing(msg *telebot.Message) func() {
 	return func() {
 		err = tg.bot.Delete(reply)
 		if err != nil {
-			log.Error().Err(err).Str("username", msg.Sender.Username).Msg("failed to delete thinking message")
+			log.Error().Err(err).Str("username", msg.Sender.Username).Int("msg", msg.ID).Msg("failed to delete thinking message")
 		}
 	}
 }
@@ -179,7 +176,7 @@ func (tg *Telegram) hasAccess(msg *telebot.Message) bool {
 
 	_, err := tg.bot.Reply(msg, texts.AccessDenied)
 	if err != nil {
-		log.Error().Err(err).Str("username", msg.Sender.Username).Msg("failed to send access denied message")
+		log.Error().Err(err).Str("username", msg.Sender.Username).Int("msg", msg.ID).Msg("failed to send access denied message")
 	}
 	return false
 }
