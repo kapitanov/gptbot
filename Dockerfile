@@ -11,6 +11,6 @@ RUN GOOS=linux GOARCH=amd64 go build -o /out/gptbot
 RUN go test -v ./...
 
 FROM alpine:latest
-WORKDIR /opt/bot
+WORKDIR /opt/gptbot
 COPY --from=builder /out/ /opt/gptbot/
 CMD /opt/gptbot/gptbot
