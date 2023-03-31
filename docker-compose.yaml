@@ -1,0 +1,9 @@
+version: "2"
+services:
+    gptbot:
+        image: gptbot:latest
+        build:
+            context: .
+        container_name: gptbot
+        env_file: ./.env
+        restart: always
