@@ -2,6 +2,7 @@ package telegram
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"github.com/alitto/pond"
@@ -111,7 +112,12 @@ func (tg *Telegram) process(msg *telebot.Message, text, altText string) {
 	if text == "" {
 		text = altText
 	}
+
 	if text == "" {
+		if msg.AlbumID != "" {
+			return
+		}
+
 		log.Warn().Str("username", msg.Sender.Username).Int("msg", msg.ID).Msg("empty text")
 
 		_, err := tg.bot.Reply(msg, texts.MissingText)
@@ -121,50 +127,16 @@ func (tg *Telegram) process(msg *telebot.Message, text, altText string) {
 		return
 	}
 
-	completed := tg.notifyProcessing(msg)
-	log.Info().Str("username", msg.Sender.Username).Str("in", text).Msg("processing")
-
-	tg.workerPool.Submit(func() {
+	tg.processAsync(msg, func() (string, error) {
 		transformedText, err := tg.transformer.Transform(context.Background(), text)
 		if err != nil {
 			log.Error().Err(err).Str("username", msg.Sender.Username).Int("msg", msg.ID).Str("text", text).Msg("failed to transform text")
-
-			_, err = tg.bot.Reply(msg, texts.Failure)
-			if err != nil {
-				log.Error().Err(err).Str("username", msg.Sender.Username).Int("msg", msg.ID).Msg("failed to send error message")
-			}
-			return
+			return "", err
 		}
 
 		log.Info().Str("username", msg.Sender.Username).Int("msg", msg.ID).Str("out", transformedText).Msg("processed")
-
-		completed()
-		_, err = tg.bot.Reply(msg, transformedText)
-		if err != nil {
-			log.Error().Err(err).Str("username", msg.Sender.Username).Int("msg", msg.ID).Msg("failed to send response message")
-		}
+		return transformedText, nil
 	})
-}
-
-func (tg *Telegram) notifyProcessing(msg *telebot.Message) func() {
-	reply, err := tg.bot.Reply(msg, texts.Thinking, telebot.Silent)
-	if err != nil {
-		log.Error().Err(err).Str("username", msg.Sender.Username).Int("msg", msg.ID).Msg("failed to send thinking message")
-		reply = nil
-	}
-
-	tg.bot.Notify(msg.Sender, telebot.Typing)
-
-	if reply == nil {
-		return func() {}
-	}
-
-	return func() {
-		err = tg.bot.Delete(reply)
-		if err != nil {
-			log.Error().Err(err).Str("username", msg.Sender.Username).Int("msg", msg.ID).Msg("failed to delete thinking message")
-		}
-	}
 }
 
 func (tg *Telegram) hasAccess(msg *telebot.Message) bool {
@@ -179,4 +151,70 @@ func (tg *Telegram) hasAccess(msg *telebot.Message) bool {
 		log.Error().Err(err).Str("username", msg.Sender.Username).Int("msg", msg.ID).Msg("failed to send access denied message")
 	}
 	return false
+}
+
+var typingTicker = time.Tick(time.Second)
+
+func (tg *Telegram) processAsync(msg *telebot.Message, fn func() (string, error)) {
+	reply, err := tg.bot.Reply(msg, texts.Thinking, telebot.Silent)
+	if err != nil {
+		log.Error().Err(err).Str("username", msg.Sender.Username).Int("msg", msg.ID).Msg("failed to reply")
+		return
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	wg := sync.WaitGroup{}
+	wg.Add(1)
+
+	go func() {
+		defer wg.Done()
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-typingTicker:
+				err := tg.bot.Notify(msg.Sender, telebot.Typing)
+				if err != nil {
+					log.Error().Err(err).Str("username", msg.Sender.Username).Int("msg", msg.ID).Msg("failed to send typing notification")
+					return
+				}
+			}
+		}
+	}()
+
+	replyCh := make(chan struct {
+		replyText string
+		err       error
+	})
+	tg.workerPool.Submit(func() {
+		replyText, err := fn()
+		replyCh <- struct {
+			replyText string
+			err       error
+		}{
+			replyText: replyText,
+			err:       err,
+		}
+	})
+
+	r := <-replyCh
+
+	cancel()
+	wg.Wait()
+
+	if r.err != nil {
+		log.Error().Err(r.err).Str("username", msg.Sender.Username).Int("msg", msg.ID).Msg("failed to process")
+
+		_, err = tg.bot.Edit(reply, texts.Failure)
+		if err != nil {
+			log.Error().Err(err).Str("username", msg.Sender.Username).Int("msg", msg.ID).Msg("failed to send error message")
+		}
+		return
+	}
+
+	_, err = tg.bot.Edit(reply, r.replyText)
+	if err != nil {
+		log.Error().Err(err).Str("username", msg.Sender.Username).Int("msg", msg.ID).Msg("failed to send reply")
+	}
 }

@@ -2,6 +2,7 @@ package gpt
 
 import (
 	"context"
+	"strings"
 
 	"github.com/rs/zerolog/log"
 	"github.com/sashabaranov/go-openai"
@@ -27,6 +28,15 @@ func New(token string) (*GPT, error) {
 // Transform transforms text.
 func (g *GPT) Transform(ctx context.Context, text string) (string, error) {
 	cfg := loadGTPConfig()
+
+	text = strings.TrimSpace(text)
+	if len(text) == 0 {
+		return "", nil
+	}
+
+	if !strings.HasSuffix(text, ".") {
+		text = text + "."
+	}
 
 	response, err := g.client.CreateChatCompletion(ctx, openai.ChatCompletionRequest{
 		Model:       cfg.Model,
