@@ -1,0 +1,15 @@
+.idea
+bin
+conf
+var
+.editorconfig
+.env
+.gitignore
+docker-compose.yaml
+Dockerfile
+example.env
+gptbot
+gptbot.exe
+LICENSE
+Makefile
+README.md

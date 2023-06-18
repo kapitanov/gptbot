@@ -2,47 +2,30 @@ package telegram
 
 import (
 	"context"
-	"sync"
 	"time"
 
-	"github.com/alitto/pond"
 	"github.com/rs/zerolog/log"
 	"gopkg.in/tucnak/telebot.v2"
 
+	"github.com/kapitanov/gptbot/internal/gpt"
+	"github.com/kapitanov/gptbot/internal/storage"
 	"github.com/kapitanov/gptbot/internal/telegram/texts"
-)
-
-const (
-	workerPoolCapacity       = 2
-	workerPoolBufferCapacity = 10
-)
-
-var (
-	refreshButton = &telebot.InlineButton{
-		Unique: "refresh",
-		Text:   "Refresh",
-	}
 )
 
 // Telegram is a telegram bot.
 type Telegram struct {
 	bot           *telebot.Bot
-	transformer   Transformer
+	storage       *storage.Storage
+	gpt           *gpt.GPT
 	accessChecker AccessChecker
-	workerPool    *pond.WorkerPool
 }
 
 // Options is a telegram bot options.
 type Options struct {
-	Token         string        // Telegram bot token.
-	Transformer   Transformer   // Text transformer.
-	AccessChecker AccessChecker // Access checker.
-}
-
-// Transformer transforms text.
-type Transformer interface {
-	// Transform transforms text.
-	Transform(ctx context.Context, text string) (string, error)
+	Token         string           // Telegram bot token.
+	GPT           *gpt.GPT         // GPT text transformer.
+	AccessChecker AccessChecker    // Access checker.
+	Storage       *storage.Storage // Storage.
 }
 
 // AccessChecker checks access to telegram chats.
@@ -66,21 +49,11 @@ func New(options Options) (*Telegram, error) {
 	tg := &Telegram{
 		bot:           bot,
 		accessChecker: options.AccessChecker,
-		transformer:   options.Transformer,
-		workerPool:    pond.New(workerPoolCapacity, workerPoolBufferCapacity),
+		gpt:           options.GPT,
+		storage:       options.Storage,
 	}
 
-	bot.Handle("/start", tg.onStartCommand)
-	bot.Handle(telebot.OnText, func(msg *telebot.Message) { tg.process(msg, nil, msg.Text, "") })
-	bot.Handle(telebot.OnPhoto, func(msg *telebot.Message) { tg.process(msg, nil, msg.Photo.Caption, msg.Caption) })
-	bot.Handle(telebot.OnVideo, func(msg *telebot.Message) { tg.process(msg, nil, msg.Video.Caption, msg.Caption) })
-	bot.Handle(telebot.OnAudio, func(msg *telebot.Message) { tg.process(msg, nil, msg.Audio.Caption, msg.Caption) })
-	bot.Handle(telebot.OnAnimation, func(msg *telebot.Message) { tg.process(msg, nil, msg.Animation.Caption, msg.Caption) })
-	bot.Handle(telebot.OnDocument, func(msg *telebot.Message) { tg.process(msg, nil, msg.Document.Caption, msg.Caption) })
-	bot.Handle(telebot.OnVoice, func(msg *telebot.Message) { tg.process(msg, nil, msg.Voice.Caption, msg.Caption) })
-	bot.Handle(refreshButton, func(c *telebot.Callback) {
-		tg.process(c.Message.ReplyTo, c.Message, c.Message.Text, "")
-	})
+	tg.setupHandlers()
 
 	return tg, nil
 }
@@ -95,58 +68,10 @@ func (tg *Telegram) Run(ctx context.Context) {
 
 // Close shuts telegram bot down.
 func (tg *Telegram) Close() {
-	tg.workerPool.StopAndWait()
-
 	_, err := tg.bot.Close()
 	if err != nil {
 		log.Error().Err(err).Msg("failed to close telegram bot")
 	}
-}
-
-func (tg *Telegram) onStartCommand(msg *telebot.Message) {
-	if !tg.hasAccess(msg) {
-		return
-	}
-
-	_, err := tg.bot.Send(msg.Sender, texts.Welcome)
-	if err != nil {
-		log.Error().Err(err).Str("username", msg.Sender.Username).Int("msg", msg.ID).Msg("failed to send welcome message")
-	}
-}
-
-func (tg *Telegram) process(msg, reply *telebot.Message, text, altText string) {
-	if !tg.hasAccess(msg) {
-		return
-	}
-
-	if text == "" {
-		text = altText
-	}
-
-	if text == "" {
-		if msg.AlbumID != "" {
-			return
-		}
-
-		log.Warn().Str("username", msg.Sender.Username).Int("msg", msg.ID).Msg("empty text")
-
-		_, err := tg.bot.Reply(msg, texts.MissingText)
-		if err != nil {
-			log.Error().Err(err).Str("username", msg.Sender.Username).Int("msg", msg.ID).Msg("failed to send error message")
-		}
-		return
-	}
-
-	tg.processAsync(msg, reply, func() (string, error) {
-		transformedText, err := tg.transformer.Transform(context.Background(), text)
-		if err != nil {
-			log.Error().Err(err).Str("username", msg.Sender.Username).Int("msg", msg.ID).Str("text", text).Msg("failed to transform text")
-			return "", err
-		}
-
-		log.Info().Str("username", msg.Sender.Username).Int("msg", msg.ID).Str("out", transformedText).Msg("processed")
-		return transformedText, nil
-	})
 }
 
 func (tg *Telegram) hasAccess(msg *telebot.Message) bool {
@@ -165,77 +90,4 @@ func (tg *Telegram) hasAccess(msg *telebot.Message) bool {
 		log.Error().Err(err).Str("username", msg.Sender.Username).Int("msg", msg.ID).Msg("failed to send access denied message")
 	}
 	return false
-}
-
-var typingTicker = time.Tick(time.Second)
-
-func (tg *Telegram) processAsync(msg, reply *telebot.Message, fn func() (string, error)) {
-	if reply == nil {
-		var err error
-		reply, err = tg.bot.Reply(msg, texts.Thinking, telebot.Silent)
-		if err != nil {
-			log.Error().Err(err).Str("username", msg.Sender.Username).Int("msg", msg.ID).Msg("failed to reply")
-			return
-		}
-	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	wg := sync.WaitGroup{}
-	wg.Add(1)
-
-	go func() {
-		defer wg.Done()
-
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-typingTicker:
-				err := tg.bot.Notify(msg.Sender, telebot.Typing)
-				if err != nil {
-					log.Error().Err(err).Str("username", msg.Sender.Username).Int("msg", msg.ID).Msg("failed to send typing notification")
-					return
-				}
-			}
-		}
-	}()
-
-	replyCh := make(chan struct {
-		replyText string
-		err       error
-	})
-	tg.workerPool.Submit(func() {
-		replyText, err := fn()
-		replyCh <- struct {
-			replyText string
-			err       error
-		}{
-			replyText: replyText,
-			err:       err,
-		}
-	})
-
-	r := <-replyCh
-
-	cancel()
-	wg.Wait()
-
-	if r.err != nil {
-		log.Error().Err(r.err).Str("username", msg.Sender.Username).Int("msg", msg.ID).Msg("failed to process")
-
-		_, err := tg.bot.Edit(reply, texts.Failure)
-		if err != nil {
-			log.Error().Err(err).Str("username", msg.Sender.Username).Int("msg", msg.ID).Msg("failed to send error message")
-		}
-		return
-	}
-
-	_, err := tg.bot.Edit(reply, r.replyText, &telebot.ReplyMarkup{
-		InlineKeyboard: [][]telebot.InlineButton{
-			{*refreshButton},
-		},
-	})
-	if err != nil {
-		log.Error().Err(err).Str("username", msg.Sender.Username).Int("msg", msg.ID).Msg("failed to send reply")
-	}
 }

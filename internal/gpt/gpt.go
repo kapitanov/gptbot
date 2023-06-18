@@ -2,7 +2,6 @@ package gpt
 
 import (
 	"context"
-	"strings"
 
 	"github.com/rs/zerolog/log"
 	"github.com/sashabaranov/go-openai"
@@ -12,6 +11,9 @@ import (
 type GPT struct {
 	client *openai.Client
 }
+
+// MaxConversationDepth limits conversation depth.
+const MaxConversationDepth = 50
 
 // New creates a new GPT-3 text transformer.
 func New(token string) (*GPT, error) {
@@ -25,33 +27,24 @@ func New(token string) (*GPT, error) {
 	return &GPT{client: client}, nil
 }
 
-// Transform transforms text.
-func (g *GPT) Transform(ctx context.Context, text string) (string, error) {
-	cfg := loadGTPConfig()
+// Message is a message in a conversation.
+type Message struct {
+	Participant Participant // Conversation participant.
+	Text        string      // Message text.
+}
 
-	text = strings.TrimSpace(text)
-	if len(text) == 0 {
-		return "", nil
-	}
+// Participant is the side of conversation.
+type Participant int
 
-	if !strings.HasSuffix(text, ".") {
-		text = text + "."
-	}
+const (
+	ParticipantBot  Participant = iota // Bot.
+	ParticipantUser                    // User.
+)
 
-	response, err := g.client.CreateChatCompletion(ctx, openai.ChatCompletionRequest{
-		Model:       cfg.Model,
-		Temperature: cfg.Temperature,
-		Messages: []openai.ChatCompletionMessage{
-			{
-				Role:    openai.ChatMessageRoleSystem,
-				Content: cfg.Prompt,
-			},
-			{
-				Role:    openai.ChatMessageRoleUser,
-				Content: text,
-			},
-		},
-	})
+// Generate generates a new message from the input stream.
+func (g *GPT) Generate(ctx context.Context, messages []Message) (string, error) {
+	request := g.createChatCompletionRequest(messages)
+	response, err := g.client.CreateChatCompletion(ctx, request)
 	if err != nil {
 		return "", err
 	}
@@ -60,4 +53,36 @@ func (g *GPT) Transform(ctx context.Context, text string) (string, error) {
 
 	transformedText := response.Choices[0].Message.Content
 	return transformedText, nil
+}
+
+func (g *GPT) createChatCompletionRequest(messages []Message) openai.ChatCompletionRequest {
+	cfg := loadGTPConfig()
+	req := openai.ChatCompletionRequest{
+		Model:       cfg.Model,
+		Temperature: cfg.Temperature,
+		Messages: []openai.ChatCompletionMessage{
+			{
+				Role:    openai.ChatMessageRoleSystem,
+				Content: cfg.Prompt,
+			},
+		},
+	}
+
+	if len(messages) > MaxConversationDepth {
+		messages = messages[len(messages)-MaxConversationDepth:]
+	}
+
+	for _, message := range messages {
+		role := openai.ChatMessageRoleUser
+		if message.Participant == ParticipantBot {
+			role = openai.ChatMessageRoleAssistant
+		}
+
+		req.Messages = append(req.Messages, openai.ChatCompletionMessage{
+			Role:    role,
+			Content: message.Text,
+		})
+	}
+
+	return req
 }

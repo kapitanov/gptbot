@@ -8,16 +8,23 @@ import (
 	"strings"
 
 	_ "github.com/joho/godotenv/autoload"
-	"github.com/kapitanov/gptbot/internal/gpt"
-	"github.com/kapitanov/gptbot/internal/telegram"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
+
+	"github.com/kapitanov/gptbot/internal/gpt"
+	"github.com/kapitanov/gptbot/internal/storage"
+	"github.com/kapitanov/gptbot/internal/telegram"
 )
 
 func main() {
 	configureLogger()
 
-	transformer, err := gpt.New(os.Getenv("OPENAI_TOKEN"))
+	s, err := storage.New(os.Getenv("STORAGE_PATH"))
+	if err != nil {
+		panic(err)
+	}
+
+	g, err := gpt.New(os.Getenv("OPENAI_TOKEN"))
 	if err != nil {
 		panic(err)
 	}
@@ -27,7 +34,8 @@ func main() {
 	tg, err := telegram.New(telegram.Options{
 		Token:         os.Getenv("TELEGRAM_BOT_TOKEN"),
 		AccessChecker: accessProvider,
-		Transformer:   transformer,
+		GPT:           g,
+		Storage:       s,
 	})
 	if err != nil {
 		panic(err)

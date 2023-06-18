@@ -20,6 +20,7 @@ This bot is non-public, so you'll need to set up your own instance of this bot t
    TELEGRAM_BOT_TOKEN=<telegram access token>
    TELEGRAM_BOT_ACCESS=<list of comma-separated telegram user ids and names>
    OPENAI_TOKEN=<place your openai token here>
+   STORAGE_PATH=./var/data.yaml
    ```
 
    You'll need to:
@@ -42,6 +43,7 @@ This bot is configured via env variables:
 | `TELEGRAM_BOT_TOKEN`  | Required | Telegram bot API access token                                    |
 | `TELEGRAM_BOT_ACCESS` | Required | List of allowed Telegram usernames (or userIDs), comma separated |
 | `OPENAI_TOKEN`        | Required | OpenAI access token                                              |
+| `STORAGE_PATH`        | Required | Path to message history file (YAML)                              |
 
 ## License
 
