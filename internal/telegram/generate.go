@@ -62,8 +62,8 @@ func (tg *Telegram) generate(msg *telebot.Message, text, altText string) {
 	}
 }
 
-func (tg *Telegram) generateE(msg *telebot.Message, text string, chain *storage.MessageChain) error {
-	gptMessages, err := generateGPTMessages(text, chain)
+func (tg *Telegram) generateE(msg *telebot.Message, request string, chain *storage.MessageChain) error {
+	gptMessages, err := generateGPTMessages(request, chain)
 	if err != nil {
 		return err
 	}
@@ -90,16 +90,18 @@ func (tg *Telegram) generateE(msg *telebot.Message, text string, chain *storage.
 		return err
 	}
 
-	reply, err = tg.bot.Edit(reply, response)
+	err = tg.reply(msg, reply, response)
 	if err != nil {
 		log.Error().Err(err).
 			Str("username", msg.Sender.Username).
 			Int("msg", msg.ID).
+			Str("request", request).
+			Str("response", response).
 			Msg("failed to send reply")
 		return err
 	}
 
-	err = chain.Store(storage.User, text)
+	err = chain.Store(storage.User, request)
 	if err != nil {
 		return err
 	}
@@ -107,6 +109,45 @@ func (tg *Telegram) generateE(msg *telebot.Message, text string, chain *storage.
 	err = chain.Store(storage.Bot, response)
 	if err != nil {
 		return err
+	}
+
+	return tg.reply(msg, reply, response)
+}
+
+func (tg *Telegram) reply(msg, reply *telebot.Message, response string) error {
+	const maxTextLength = 4096 - 1
+
+	for len(response) > 0 {
+		var text string
+		if len(response) <= maxTextLength {
+			text = response
+			response = ""
+		} else {
+			text = response[:maxTextLength]
+			response = response[maxTextLength:]
+		}
+
+		if reply != nil {
+			_, err := tg.bot.Edit(reply, text)
+			if err != nil {
+				log.Error().Err(err).
+					Str("username", msg.Sender.Username).
+					Int("msg", msg.ID).
+					Msg("failed to send reply")
+				return err
+			}
+
+			reply = nil
+		} else {
+			_, err := tg.bot.Reply(msg, text, telebot.Silent)
+			if err != nil {
+				log.Error().Err(err).
+					Str("username", msg.Sender.Username).
+					Int("msg", msg.ID).
+					Msg("failed to reply")
+				return err
+			}
+		}
 	}
 
 	return nil
