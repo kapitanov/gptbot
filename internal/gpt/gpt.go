@@ -44,12 +44,30 @@ const (
 // Generate generates a new message from the input stream.
 func (g *GPT) Generate(ctx context.Context, messages []Message) (string, error) {
 	request := g.createChatCompletionRequest(messages)
+
+	for _, m := range request.Messages {
+		log.Debug().Str("role", m.Role).Str("content", m.Content).Str("dir", "out").Msg("gpt request")
+	}
+
 	response, err := g.client.CreateChatCompletion(ctx, request)
 	if err != nil {
 		return "", err
 	}
 
-	log.Info().Int("tokens", response.Usage.TotalTokens).Msg("openai usage")
+	for _, m := range response.Choices {
+		log.Debug().Str("role", m.Message.Role).
+			Str("content", m.Message.Content).
+			Str("finish", string(m.FinishReason)).
+			Msg("gpt response")
+	}
+
+	log.Debug().
+		Str("object", response.Object).
+		Str("model", response.Model).
+		Int("tokens", response.Usage.TotalTokens).
+		Int("prompt", response.Usage.PromptTokens).
+		Int("response", response.Usage.CompletionTokens).
+		Msg("gpt stats")
 
 	transformedText := response.Choices[0].Message.Content
 	return transformedText, nil

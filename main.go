@@ -57,7 +57,7 @@ func main() {
 }
 
 func configureLogger() {
-	zerolog.SetGlobalLevel(zerolog.InfoLevel)
+	zerolog.SetGlobalLevel(zerolog.DebugLevel)
 	log.Logger = log.Output(zerolog.ConsoleWriter{
 		Out: os.Stderr,
 	})
