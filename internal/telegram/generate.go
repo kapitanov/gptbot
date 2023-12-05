@@ -2,6 +2,7 @@ package telegram
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -52,7 +53,7 @@ func (tg *Telegram) generate(msg *telebot.Message, text, altText string) {
 			Str("text", text).
 			Msg("failed to process")
 
-		_, err := tg.bot.Reply(msg, texts.Failure)
+		_, err := tg.bot.Reply(msg, fmt.Sprintf("%s\n%s", texts.Failure, err.Error()))
 		if err != nil {
 			log.Error().Err(err).
 				Str("username", msg.Sender.Username).
@@ -117,6 +118,8 @@ func (tg *Telegram) generateE(msg *telebot.Message, request string, chain *stora
 func (tg *Telegram) reply(msg, reply *telebot.Message, response string) error {
 	const maxTextLength = 4096 - 1
 
+	_ = tg.bot.Delete(reply)
+
 	for len(response) > 0 {
 		var text string
 		if len(response) <= maxTextLength {
@@ -127,26 +130,13 @@ func (tg *Telegram) reply(msg, reply *telebot.Message, response string) error {
 			response = response[maxTextLength:]
 		}
 
-		if reply != nil {
-			_, err := tg.bot.Edit(reply, text)
-			if err != nil {
-				log.Error().Err(err).
-					Str("username", msg.Sender.Username).
-					Int("msg", msg.ID).
-					Msg("failed to send reply")
-				return err
-			}
-
-			reply = nil
-		} else {
-			_, err := tg.bot.Reply(msg, text, telebot.Silent)
-			if err != nil {
-				log.Error().Err(err).
-					Str("username", msg.Sender.Username).
-					Int("msg", msg.ID).
-					Msg("failed to reply")
-				return err
-			}
+		_, err := tg.bot.Reply(msg, text, telebot.Silent)
+		if err != nil {
+			log.Error().Err(err).
+				Str("username", msg.Sender.Username).
+				Int("msg", msg.ID).
+				Msg("failed to reply")
+			return err
 		}
 	}
 
