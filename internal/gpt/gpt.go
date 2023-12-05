@@ -13,7 +13,7 @@ type GPT struct {
 }
 
 // MaxConversationDepth limits conversation depth.
-const MaxConversationDepth = 50
+const MaxConversationDepth = 5
 
 // New creates a new GPT-3 text transformer.
 func New(token string) (*GPT, error) {
