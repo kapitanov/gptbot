@@ -112,7 +112,14 @@ func (tg *Telegram) generateE(msg *telebot.Message, request string, chain *stora
 		return err
 	}
 
-	return tg.reply(msg, reply, response)
+	log.Info().
+		Str("username", msg.Sender.Username).
+		Int("msg", msg.ID).
+		Str("request", request).
+		Str("response", response).
+		Msg("generated a reply")
+
+	return nil
 }
 
 func (tg *Telegram) reply(msg, reply *telebot.Message, response string) error {
