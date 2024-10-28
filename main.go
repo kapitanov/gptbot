@@ -6,6 +6,7 @@ import (
 	"os/signal"
 	"strconv"
 	"strings"
+	"time"
 
 	_ "github.com/joho/godotenv/autoload"
 	"github.com/rs/zerolog"
@@ -59,7 +60,8 @@ func main() {
 func configureLogger() {
 	zerolog.SetGlobalLevel(zerolog.DebugLevel)
 	log.Logger = log.Output(zerolog.ConsoleWriter{
-		Out: os.Stderr,
+		Out:        os.Stderr,
+		TimeFormat: time.RFC3339,
 	})
 
 	log.Logger = log.Logger.With().Timestamp().Logger()

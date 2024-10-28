@@ -14,7 +14,12 @@ type gptConfig struct {
 }
 
 func loadGTPConfig() *gptConfig {
-	const sourcePath = "./conf/gpt.yaml"
+	const defaultSourcePath = "./conf/gpt.yaml"
+	sourcePath := os.Getenv("CONFIG_PATH")
+	if sourcePath == "" {
+		sourcePath = defaultSourcePath
+	}
+
 	raw, err := os.ReadFile(sourcePath)
 	if err != nil {
 		log.Error().Err(err).Str("path", sourcePath).Msg("unable to load gpt config")

@@ -64,7 +64,7 @@ func (tg *Telegram) generate(msg *telebot.Message, text, altText string) {
 }
 
 func (tg *Telegram) generateE(msg *telebot.Message, request string, chain *storage.MessageChain) error {
-	gptMessages, err := generateGPTMessages(request, chain)
+	gptMessages, err := generateGPTMessages(msg, request, chain)
 	if err != nil {
 		return err
 	}
@@ -91,7 +91,7 @@ func (tg *Telegram) generateE(msg *telebot.Message, request string, chain *stora
 		return err
 	}
 
-	err = tg.reply(msg, reply, response)
+	reply, err = tg.reply(msg, reply, response)
 	if err != nil {
 		log.Error().Err(err).
 			Str("username", msg.Sender.Username).
@@ -102,12 +102,16 @@ func (tg *Telegram) generateE(msg *telebot.Message, request string, chain *stora
 		return err
 	}
 
-	err = chain.Store(storage.User, request)
+	var replyToID *int
+	if msg.ReplyTo != nil {
+		replyToID = &msg.ReplyTo.ID
+	}
+	err = chain.Store(msg.ID, replyToID, storage.User, request)
 	if err != nil {
 		return err
 	}
 
-	err = chain.Store(storage.Bot, response)
+	err = chain.Store(reply.ID, &msg.ID, storage.Bot, response)
 	if err != nil {
 		return err
 	}
@@ -122,7 +126,7 @@ func (tg *Telegram) generateE(msg *telebot.Message, request string, chain *stora
 	return nil
 }
 
-func (tg *Telegram) reply(msg, reply *telebot.Message, response string) error {
+func (tg *Telegram) reply(msg, reply *telebot.Message, response string) (*telebot.Message, error) {
 	const maxTextLength = 4096 - 1
 
 	_ = tg.bot.Delete(reply)
@@ -137,26 +141,31 @@ func (tg *Telegram) reply(msg, reply *telebot.Message, response string) error {
 			response = response[maxTextLength:]
 		}
 
-		_, err := tg.bot.Reply(msg, text, telebot.Silent)
+		var err error
+		reply, err = tg.bot.Reply(msg, text, telebot.Silent)
 		if err != nil {
 			log.Error().Err(err).
 				Str("username", msg.Sender.Username).
 				Int("msg", msg.ID).
 				Msg("failed to reply")
-			return err
+			return nil, err
 		}
 	}
 
-	return nil
+	return reply, nil
 }
 
-func generateGPTMessages(text string, chain *storage.MessageChain) ([]gpt.Message, error) {
+func generateGPTMessages(msg *telebot.Message, text string, chain *storage.MessageChain) ([]gpt.Message, error) {
 	text = normalizeText(text)
 	if text == "" {
 		return nil, errors.New("text is empty")
 	}
 
-	storedMessages := chain.Read()
+	msgID := 0
+	if msg.ReplyTo != nil {
+		msgID = msg.ReplyTo.ID
+	}
+	storedMessages := chain.Read(msgID)
 
 	gptMessages := make([]gpt.Message, 0, len(storedMessages))
 	for _, storedMessage := range storedMessages {

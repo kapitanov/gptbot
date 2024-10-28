@@ -1,6 +1,6 @@
 module github.com/kapitanov/gptbot
 
-go 1.20
+go 1.23
 
 require (
 	github.com/joho/godotenv v1.5.1

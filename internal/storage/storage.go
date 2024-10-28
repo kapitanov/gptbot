@@ -2,6 +2,7 @@ package storage
 
 import (
 	"os"
+	"slices"
 	"sync"
 
 	"github.com/pkg/errors"
@@ -33,15 +34,19 @@ func New(filename string) (*Storage, error) {
 // TX runs a function within a transaction.
 func (s *Storage) TX(userID int64, fn func(chain *MessageChain) error) error {
 	return s.do(func(root *RootYAML, save func() error) error {
-		chain, exists := root.Chains[userID]
+		conversation, exists := root.Conversations[userID]
 		if !exists {
-			chain = &MessageChainYAML{}
-			root.Chains[userID] = chain
+			conversation = &ConversationYAML{}
+			root.Conversations[userID] = conversation
+		}
+
+		if conversation.Messages == nil {
+			conversation.Messages = make(map[int]*MessageYAML)
 		}
 
 		return fn(&MessageChain{
-			chain: chain,
-			save:  save,
+			conversation: conversation,
+			save:         save,
 		})
 	})
 }
@@ -87,8 +92,8 @@ func (s *Storage) load() (*RootYAML, error) {
 		return nil, err
 	}
 
-	if root.Chains == nil {
-		root.Chains = make(map[int64]*MessageChainYAML)
+	if root.Conversations == nil {
+		root.Conversations = make(map[int64]*ConversationYAML)
 	}
 
 	return &root, nil
@@ -110,30 +115,42 @@ func (s *Storage) store(root *RootYAML) error {
 
 // MessageChain is a single conversation.
 type MessageChain struct {
-	chain *MessageChainYAML
-	save  func() error
+	conversation *ConversationYAML
+	save         func() error
 }
 
 // Store writes new message into the conversation.
-func (c *MessageChain) Store(side MessageSide, text string) error {
+func (c *MessageChain) Store(msgID int, replyToID *int, side MessageSide, text string) error {
 	msg := MessageYAML{
-		Side: side,
-		Text: text,
+		ReplyTo: replyToID,
+		Side:    side,
+		Text:    text,
 	}
-	c.chain.Messages = append(c.chain.Messages, &msg)
+	c.conversation.Messages[msgID] = &msg
 	return c.save()
 }
 
 // Store reads all messages from the conversation.
-func (c *MessageChain) Read() []Message {
-	messages := make([]Message, 0, len(c.chain.Messages))
-	for _, m := range c.chain.Messages {
+func (c *MessageChain) Read(messageID int) []Message {
+	var messages []Message
+
+	for {
+		msg, ok := c.conversation.Messages[messageID]
+		if !ok {
+			break
+		}
 		messages = append(messages, Message{
-			Side: m.Side,
-			Text: m.Text,
+			Side: msg.Side,
+			Text: msg.Text,
 		})
+		if msg.ReplyTo == nil {
+			break
+		}
+
+		messageID = *msg.ReplyTo
 	}
 
+	slices.Reverse(messages)
 	return messages
 }
 
@@ -153,16 +170,17 @@ const (
 
 // RootYAML is a YAML model for data root.
 type RootYAML struct {
-	Chains map[int64]*MessageChainYAML `yaml:"chains"` // Conversations.
+	Conversations map[int64]*ConversationYAML `yaml:"conversations"` // Conversations.
 }
 
-// MessageChainYAML is a YAML model for conversation.
-type MessageChainYAML struct {
-	Messages []*MessageYAML `yaml:"user_messages"` // Messages.
+// ConversationYAML is a YAML model for conversation.
+type ConversationYAML struct {
+	Messages map[int]*MessageYAML `yaml:"messages"` // Messages.
 }
 
 // MessageYAML is a YAML model for a message.
 type MessageYAML struct {
-	Side MessageSide `yaml:"side"` // Conversation side.
-	Text string      `yaml:"text"` // Message text.
+	ReplyTo *int        `yaml:"reply_to,omitempty"` // ID of message (if this one is a reply).
+	Side    MessageSide `yaml:"side"`               // Conversation side.
+	Text    string      `yaml:"text"`               // Message text.
 }
