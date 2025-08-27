@@ -1,4 +1,4 @@
-FROM golang:1.23-alpine AS builder
+FROM golang:1.25-alpine AS builder
 RUN apk update && \
     apk add --no-cache git gcc musl-dev
 WORKDIR /app
@@ -13,4 +13,5 @@ RUN go test -v ./...
 FROM alpine:latest
 WORKDIR /opt/gptbot
 COPY --from=builder /out/ /opt/gptbot/
-CMD /opt/gptbot/gptbot
+CMD [ "/opt/gptbot/gptbot" ]
+

@@ -5,18 +5,19 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/kapitanov/gptbot/internal/telegram/mdparser"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog/log"
-	"gopkg.in/tucnak/telebot.v2"
+	"gopkg.in/telebot.v4"
 
 	"github.com/kapitanov/gptbot/internal/gpt"
 	"github.com/kapitanov/gptbot/internal/storage"
 	"github.com/kapitanov/gptbot/internal/telegram/texts"
 )
 
-func (tg *Telegram) generate(msg *telebot.Message, text, altText string) {
+func (tg *Telegram) generate(msg *telebot.Message, text, altText string) error {
 	if !tg.hasAccess(msg) {
-		return
+		return nil
 	}
 
 	if text == "" {
@@ -25,7 +26,7 @@ func (tg *Telegram) generate(msg *telebot.Message, text, altText string) {
 
 	if text == "" {
 		if msg.AlbumID != "" {
-			return
+			return nil
 		}
 
 		log.Warn().
@@ -40,7 +41,7 @@ func (tg *Telegram) generate(msg *telebot.Message, text, altText string) {
 				Int("msg", msg.ID).
 				Msg("failed to send error message")
 		}
-		return
+		return err
 	}
 
 	err := tg.storage.TX(msg.Sender.ID, func(chain *storage.MessageChain) error {
@@ -59,8 +60,10 @@ func (tg *Telegram) generate(msg *telebot.Message, text, altText string) {
 				Str("username", msg.Sender.Username).
 				Int("msg", msg.ID).
 				Msg("failed to send error message")
+			return err
 		}
 	}
+	return nil
 }
 
 func (tg *Telegram) generateE(msg *telebot.Message, request string, chain *storage.MessageChain) error {
@@ -129,26 +132,40 @@ func (tg *Telegram) generateE(msg *telebot.Message, request string, chain *stora
 func (tg *Telegram) reply(msg, reply *telebot.Message, response string) (*telebot.Message, error) {
 	const maxTextLength = 4096 - 1
 
+	response, entities := mdparser.Parse(response)
+
 	_ = tg.bot.Delete(reply)
 
-	for len(response) > 0 {
-		var text string
-		if len(response) <= maxTextLength {
-			text = response
-			response = ""
-		} else {
-			text = response[:maxTextLength]
-			response = response[maxTextLength:]
-		}
-
+	if len(response) <= maxTextLength {
 		var err error
-		reply, err = tg.bot.Reply(msg, text, telebot.Silent)
+		reply, err = tg.bot.Reply(msg, response, &telebot.SendOptions{Entities: entities})
 		if err != nil {
 			log.Error().Err(err).
 				Str("username", msg.Sender.Username).
 				Int("msg", msg.ID).
 				Msg("failed to reply")
 			return nil, err
+		}
+	} else {
+		for len(response) > 0 {
+			var text string
+			if len(response) <= maxTextLength {
+				text = response
+				response = ""
+			} else {
+				text = response[:maxTextLength]
+				response = response[maxTextLength:]
+			}
+
+			var err error
+			reply, err = tg.bot.Reply(msg, text, telebot.Silent)
+			if err != nil {
+				log.Error().Err(err).
+					Str("username", msg.Sender.Username).
+					Int("msg", msg.ID).
+					Msg("failed to reply")
+				return nil, err
+			}
 		}
 	}
 

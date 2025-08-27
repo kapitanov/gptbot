@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/rs/zerolog/log"
-	"gopkg.in/tucnak/telebot.v2"
+	"gopkg.in/telebot.v4"
 
 	"github.com/kapitanov/gptbot/internal/gpt"
 	"github.com/kapitanov/gptbot/internal/storage"
