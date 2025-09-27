@@ -2,14 +2,13 @@
 
 A telegram bot that uses GPT3 to transform text.
 
-**Note: This repository has been converted from Go to JavaScript/Node.js while maintaining the same functionality.**
+**Note: This repository has been converted from JavaScript/Node.js back to Go while maintaining the same functionality.**
 
 This bot is non-public, so you'll need to set up your own instance of this bot to use it.
 
 ## Requirements
 
-- Node.js 18 or higher
-- npm
+- Go 1.21 or higher
 
 ## How to build and run
 
@@ -24,7 +23,7 @@ This bot is non-public, so you'll need to set up your own instance of this bot t
 2. Install dependencies:
 
    ```shell
-   npm install
+   go mod download
    ```
 
 3. Create a `.env` file (see [configuration](#configuration) section below):
@@ -41,10 +40,17 @@ This bot is non-public, so you'll need to set up your own instance of this bot t
     * get an access token for openai.com [here](https://platform.openai.com/account/api-keys)
     * get a bot api token for Telegram [here](http://t.me/BotFather)
 
-4. Run the bot:
+4. Build and run the bot:
 
    ```shell
-   npm start
+   make run
+   ```
+
+   Or manually:
+
+   ```shell
+   go build -o gptbot .
+   ./gptbot
    ```
 
    Or with Docker:
@@ -57,12 +63,17 @@ This bot is non-public, so you'll need to set up your own instance of this bot t
 
 Run tests:
 ```shell
-npm test
+make test
 ```
 
-Run in development mode with auto-restart:
+Or manually:
 ```shell
-npm run dev
+go test ./...
+```
+
+Build only:
+```shell
+make build
 ```
 
 ## Configuration
@@ -76,15 +87,15 @@ This bot is configured via env variables:
 | `OPENAI_TOKEN`        | Required | OpenAI access token                                              |
 | `STORAGE_PATH`        | Required | Path to message history file (YAML)                              |
 
-## Migration from Go
+## Migration to Go
 
-This repository has been fully converted from Go to JavaScript while preserving all functionality:
+This repository has been fully converted from JavaScript/Node.js back to Go while preserving all functionality:
 
-- **Language**: Go → JavaScript (Node.js 18+)
-- **Dependencies**: Go modules → npm packages
-- **Structure**: Maintained equivalent module structure in `src/` directory
-- **Configuration**: Same environment variables and YAML config
-- **Docker**: Updated for Node.js runtime
+- **Language**: JavaScript (Node.js) → Go 1.21+
+- **Dependencies**: npm packages → Go modules
+- **Structure**: Reorganized from `src/` to Go-standard `internal/` package structure
+- **Configuration**: Same environment variables and YAML config files
+- **Docker**: Updated for Go runtime with multi-stage build
 - **Functionality**: All original features preserved including GPT integration, Telegram bot, storage, and access control
 
 ## License

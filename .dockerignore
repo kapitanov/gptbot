@@ -1,14 +1,41 @@
-.idea
+# Git and IDE files
 .git
-.env
 .gitignore
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Go binaries (we build inside Docker)
+gptbot
+gptbot.exe
+*.exe
+*.test
+
+# Go build cache and modules cache (will be rebuilt in Docker)
+.cache/
+
+# Environment and configuration files (secrets)
+.env
+.env.*
+
+# Documentation and dev files
+README.md
+LICENSE
 docker-compose.yaml
 Dockerfile
 example.env
-LICENSE
 Makefile
-README.md
-node_modules
-npm-debug.log*
-.npm
-test
+
+# Application data (runtime files)
+var/
+
+# Logs
+logs/
+*.log
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+Thumbs.db

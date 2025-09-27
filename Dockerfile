@@ -1,21 +1,20 @@
-FROM node:18-alpine AS builder
+FROM golang:1.21-alpine AS builder
 WORKDIR /app
-COPY package*.json ./
-RUN npm ci --only=production
+COPY go.mod go.sum ./
+RUN go mod download
 
 COPY . .
-RUN npm test
+RUN go test ./...
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o gptbot .
 
-FROM node:18-alpine
+FROM alpine:latest
+RUN apk --no-cache add ca-certificates
 WORKDIR /opt/gptbot
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/package*.json ./
-COPY --from=builder /app/main.js ./
-COPY --from=builder /app/src ./src
+COPY --from=builder /app/gptbot .
 COPY --from=builder /app/conf ./conf
 
 # Create var directory for storage
 RUN mkdir -p ./var
 
-CMD [ "node", "main.js" ]
+CMD [ "./gptbot" ]
 
