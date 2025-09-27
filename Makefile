@@ -1,11 +1,14 @@
-all: build docker
+all: install docker
 
-build:
-	@go build -o ./bin/gptbot .
+install:
+	@npm install
 
-run: build
+run: install
 	@sh -c '[ -f .env ] || ( echo "Error! Missing .env file. See example.env for an example." && exit 1)'
-	@source .env && ./bin/gptbot
+	@npm start
+
+test:
+	@npm test
 
 docker:
 	@docker build -t gptbot:latest .

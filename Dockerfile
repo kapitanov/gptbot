@@ -1,17 +1,21 @@
-FROM golang:1.25-alpine AS builder
-RUN apk update && \
-    apk add --no-cache git gcc musl-dev
+FROM node:18-alpine AS builder
 WORKDIR /app
-COPY go.mod .
-COPY go.sum .
-RUN go mod download
+COPY package*.json ./
+RUN npm ci --only=production
 
 COPY . .
-RUN GOOS=linux GOARCH=amd64 go build -o /out/gptbot
-RUN go test -v ./...
+RUN npm test
 
-FROM alpine:latest
+FROM node:18-alpine
 WORKDIR /opt/gptbot
-COPY --from=builder /out/ /opt/gptbot/
-CMD [ "/opt/gptbot/gptbot" ]
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/package*.json ./
+COPY --from=builder /app/main.js ./
+COPY --from=builder /app/src ./src
+COPY --from=builder /app/conf ./conf
+
+# Create var directory for storage
+RUN mkdir -p ./var
+
+CMD [ "node", "main.js" ]
 
