@@ -13,5 +13,4 @@ RUN go test -v ./...
 FROM alpine:latest
 WORKDIR /opt/gptbot
 COPY --from=builder /out/ /opt/gptbot/
-CMD [ "/opt/gptbot/gptbot" ]
-
+CMD [ "/opt/gptbot/gptbot", "run", "-v" ]

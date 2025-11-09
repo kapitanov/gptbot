@@ -1,11 +1,16 @@
 all: build docker
 
 build:
-	@go build -o ./bin/gptbot .
+	go build -o ./bin/gptbot .
 
-run: build
+run: build _ensure_env_file
+	source .env && ./bin/gptbot run -v
+
+chat: build _ensure_env_file
+	source .env && ./bin/gptbot chat
+
+_ensure_env_file:
 	@sh -c '[ -f .env ] || ( echo "Error! Missing .env file. See example.env for an example." && exit 1)'
-	@source .env && ./bin/gptbot
 
 docker:
-	@docker build -t gptbot:latest .
+	docker build -t gptbot:latest .

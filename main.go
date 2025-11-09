@@ -1,16 +1,22 @@
 package main
 
 import (
+	"bufio"
 	"context"
+	"errors"
+	"fmt"
+	"io"
 	"os"
 	"os/signal"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/chzyer/readline"
 	_ "github.com/joho/godotenv/autoload"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
+	"github.com/spf13/cobra"
 
 	"github.com/kapitanov/gptbot/internal/gpt"
 	"github.com/kapitanov/gptbot/internal/storage"
@@ -18,53 +24,81 @@ import (
 )
 
 func main() {
-	configureLogger()
-
-	s, err := storage.New(os.Getenv("STORAGE_PATH"))
-	if err != nil {
-		panic(err)
+	rootCmd := &cobra.Command{
+		Use: "gptbot",
 	}
 
-	g, err := gpt.New(os.Getenv("OPENAI_TOKEN"))
-	if err != nil {
-		panic(err)
+	verbose := rootCmd.PersistentFlags().BoolP("verbose", "v", false, "enable verbose logs")
+	quiet := rootCmd.PersistentFlags().BoolP("quiet", "q", false, "suppress non-error logs")
+
+	rootCmd.PersistentPreRun = func(cmd *cobra.Command, args []string) {
+		zerolog.SetGlobalLevel(zerolog.InfoLevel)
+		if *verbose {
+			zerolog.SetGlobalLevel(zerolog.DebugLevel)
+		}
+		if *quiet {
+			zerolog.SetGlobalLevel(zerolog.InfoLevel)
+		}
+
+		log.Logger = log.Output(zerolog.ConsoleWriter{
+			Out:        os.Stderr,
+			TimeFormat: time.RFC3339,
+		})
+		log.Logger = log.Logger.With().Timestamp().Logger()
 	}
 
-	accessProvider := NewAccessProvider(os.Getenv("TELEGRAM_BOT_ACCESS"))
+	rootCmd.AddCommand(runCommand())
+	rootCmd.AddCommand(chatCommand())
 
-	tg, err := telegram.New(telegram.Options{
-		Token:         os.Getenv("TELEGRAM_BOT_TOKEN"),
-		AccessChecker: accessProvider,
-		GPT:           g,
-		Storage:       s,
-	})
-	if err != nil {
-		panic(err)
+	if err := rootCmd.Execute(); err != nil {
+		log.Error().Msg(err.Error())
+		os.Exit(1)
 	}
-	defer tg.Close()
-
-	ctx, cancel := context.WithCancel(context.Background())
-	interrupt := make(chan os.Signal)
-	signal.Notify(interrupt, os.Interrupt)
-
-	go func() {
-		<-interrupt
-		cancel()
-	}()
-
-	log.Info().Msg("press <ctrl+c> to exit")
-	tg.Run(ctx)
-	log.Info().Msg("good bye")
 }
 
-func configureLogger() {
-	zerolog.SetGlobalLevel(zerolog.DebugLevel)
-	log.Logger = log.Output(zerolog.ConsoleWriter{
-		Out:        os.Stderr,
-		TimeFormat: time.RFC3339,
-	})
+func runCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "run",
+		Short: "Run the GPT bot",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			s, err := storage.New(os.Getenv("STORAGE_PATH"))
+			if err != nil {
+				return err
+			}
 
-	log.Logger = log.Logger.With().Timestamp().Logger()
+			g, err := gpt.New(os.Getenv("OPENAI_TOKEN"))
+			if err != nil {
+				return err
+			}
+
+			accessProvider := NewAccessProvider(os.Getenv("TELEGRAM_BOT_ACCESS"))
+
+			tg, err := telegram.New(telegram.Options{
+				Token:         os.Getenv("TELEGRAM_BOT_TOKEN"),
+				AccessChecker: accessProvider,
+				GPT:           g,
+				Storage:       s,
+			})
+			if err != nil {
+				return err
+			}
+			defer tg.Close()
+
+			ctx, cancel := context.WithCancel(context.Background())
+			interrupt := make(chan os.Signal, 1)
+			signal.Notify(interrupt, os.Interrupt)
+
+			go func() {
+				<-interrupt
+				cancel()
+			}()
+
+			log.Info().Msg("press <ctrl+c> to exit")
+			tg.Run(ctx)
+			log.Info().Msg("good bye")
+			return nil
+		},
+	}
 }
 
 // AccessProvider checks access to telegram chats.
@@ -111,4 +145,85 @@ func (ap *AccessProvider) CheckAccess(id int64, username string) bool {
 	}
 
 	return false
+}
+
+func chatCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "chat",
+		Short: "Run the GPT bot in terminal chat mode",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			g, err := gpt.New(os.Getenv("OPENAI_TOKEN"))
+			if err != nil {
+				return err
+			}
+
+			ctx, cancel := context.WithCancel(context.Background())
+			interrupt := make(chan os.Signal, 1)
+			signal.Notify(interrupt, os.Interrupt)
+
+			go func() {
+				<-interrupt
+				cancel()
+			}()
+
+			var messages []gpt.Message
+
+			_, _ = fmt.Fprintf(os.Stderr, "(type \"/q\" to quit)\n")
+
+			for {
+				line, err := readLine()
+				if err != nil {
+					if errors.Is(err, readline.ErrInterrupt) || errors.Is(err, io.EOF) {
+						return nil
+					}
+					break
+				}
+
+				line = strings.TrimSpace(line)
+				if line == "" {
+					continue
+				}
+				if line == "/exit" || line == "/quit" || line == "/q" {
+					return nil
+				}
+
+				if ctx.Err() != nil {
+					return nil
+				}
+
+				messages = append(messages, gpt.Message{
+					Participant: gpt.ParticipantUser,
+					Text:        line,
+				})
+
+				_, _ = fmt.Fprintf(os.Stderr, "... ")
+				response, err := g.Generate(ctx, messages)
+				if err != nil {
+					if errors.Is(err, context.Canceled) {
+						return nil
+					}
+					log.Error().Err(err).Msg("failed to generate response")
+					continue
+				}
+
+				_, _ = fmt.Fprintf(os.Stderr, "\r< %s\n", response)
+				messages = append(messages, gpt.Message{
+					Participant: gpt.ParticipantBot,
+					Text:        response,
+				})
+			}
+			return nil
+		},
+	}
+}
+
+func readLine() (string, error) {
+	_, _ = fmt.Fprintf(os.Stderr, "> ")
+	reader := bufio.NewReader(os.Stdin)
+	line, err := reader.ReadString('\n')
+	if err != nil {
+		return "", err
+	}
+
+	return strings.TrimSpace(line), nil
 }
