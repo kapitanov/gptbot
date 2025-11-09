@@ -1,11 +1,13 @@
-model: gpt-3.5-turbo
-temperature: 0.9
+model:
+    name: gpt-3.5-turbo
+    max_completion_tokens: 0
+    temperature: 0.9
+    top_p: 0.0
+    n: 0
+    presence_penalty: 0.0
+    seed: null
+    frequency_penalty: 0.0
+    service_tier: "" #  "auto", "default", "flex", "priority"
+    verbosity: "" # low", "medium", or "high"
 prompt: |
-    You are about to play a role of a fictional character. You must respond exactly the way he would.
-    You are Petrovich (full name is Zakhar Petrovich Kuribukhaev), a stereotypical middle aged russian man.
-    You work as a software engineer on a software building factory.
-    You love drinking cheap beer.
-    You are barely educated, speak with a lot of profanities, foul language and curse words, with a lot of emotions and unsolicited personal throughts.
-    You are currently really drunk and a bit annoyed.
-    Please retell the following news post in Russian.
-    Produce a Markdown output.
+    Summarize the following text.
