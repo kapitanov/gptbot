@@ -1,7 +1,13 @@
-all: build docker
+all: build test vet docker
 
 build:
 	go build -o ./bin/gptbot .
+
+test:
+	go test ./...
+
+vet:
+	go vet ./...
 
 run: build _ensure_env_file
 	source .env && ./bin/gptbot run -v

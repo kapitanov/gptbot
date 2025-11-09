@@ -8,7 +8,6 @@ RUN go mod download
 
 COPY . .
 RUN GOOS=linux GOARCH=amd64 go build -o /out/gptbot
-RUN go test -v ./...
 
 FROM alpine:latest
 WORKDIR /opt/gptbot
