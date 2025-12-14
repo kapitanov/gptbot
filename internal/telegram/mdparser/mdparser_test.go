@@ -89,18 +89,18 @@ func TestParse(t *testing.T) {
 		{
 			Name:         "Heading1",
 			Input:        "# Hello World!",
-			ExpectedText: "Hello World!",
+			ExpectedText: "\n\nHello World!",
 			ExpectedEntities: []telebot.MessageEntity{
-				{Type: telebot.EntityUnderline, Offset: 0, Length: 12},
-				{Type: telebot.EntityBold, Offset: 0, Length: 12},
+				{Type: telebot.EntityUnderline, Offset: 2, Length: 12},
+				{Type: telebot.EntityBold, Offset: 2, Length: 12},
 			},
 		},
 		{
 			Name:         "Heading2",
 			Input:        "## Hello World!",
-			ExpectedText: "Hello World!",
+			ExpectedText: "\n\nHello World!",
 			ExpectedEntities: []telebot.MessageEntity{
-				{Type: telebot.EntityUnderline, Offset: 0, Length: 12},
+				{Type: telebot.EntityUnderline, Offset: 2, Length: 12},
 			},
 		},
 		{

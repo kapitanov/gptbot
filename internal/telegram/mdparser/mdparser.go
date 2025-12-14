@@ -111,9 +111,11 @@ func (c *converter) visitHeading(node *ast.Heading) {
 		entities = append(entities, telebot.MessageEntity{Type: telebot.EntityBold})
 	}
 
+	c.writeBytes([]byte("\n\n"))
 	end := c.begin(entities...)
 	c.visitGeneric(node)
 	end()
+	c.writeBytes([]byte("\n"))
 }
 
 func (c *converter) visitCode(node *ast.Code) {
