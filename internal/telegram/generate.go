@@ -94,13 +94,13 @@ func (tg *Telegram) generateE(msg *telebot.Message, request string, chain *stora
 		return err
 	}
 
-	reply, err = tg.reply(msg, reply, response)
+	reply, err = tg.reply(msg, reply, response.Text)
 	if err != nil {
 		log.Error().Err(err).
 			Str("username", msg.Sender.Username).
 			Int("msg", msg.ID).
 			Str("request", request).
-			Str("response", response).
+			Str("response", response.Text).
 			Msg("failed to send reply")
 		return err
 	}
@@ -114,7 +114,7 @@ func (tg *Telegram) generateE(msg *telebot.Message, request string, chain *stora
 		return err
 	}
 
-	err = chain.Store(reply.ID, &msg.ID, storage.Bot, response)
+	err = chain.Store(reply.ID, &msg.ID, storage.Bot, response.Text)
 	if err != nil {
 		return err
 	}
@@ -123,7 +123,7 @@ func (tg *Telegram) generateE(msg *telebot.Message, request string, chain *stora
 		Str("username", msg.Sender.Username).
 		Int("msg", msg.ID).
 		Str("request", request).
-		Str("response", response).
+		Str("response", response.Text).
 		Msg("generated a reply")
 
 	return nil

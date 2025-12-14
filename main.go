@@ -206,10 +206,12 @@ func chatCommand() *cobra.Command {
 					continue
 				}
 
-				_, _ = fmt.Fprintf(os.Stderr, "\r< %s\n", response)
+				_, _ = fmt.Fprintf(os.Stderr, "\r< %s\n\n", response.Text)
+				_, _ = fmt.Fprintf(os.Stderr, "# %d tokens\n\n", response.Usage.TotalTokens)
+
 				messages = append(messages, gpt.Message{
 					Participant: gpt.ParticipantBot,
-					Text:        response,
+					Text:        response.Text,
 				})
 			}
 			return nil

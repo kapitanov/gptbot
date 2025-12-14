@@ -9,5 +9,4 @@ model:
     frequency_penalty: 0.0
     service_tier: "" #  "auto", "default", "flex", "priority"
     verbosity: "" # low", "medium", or "high"
-prompt: |
-    Summarize the following text.
+

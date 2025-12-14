@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"path/filepath"
 
 	"github.com/rs/zerolog/log"
 	"github.com/sashabaranov/go-openai"
@@ -44,9 +45,23 @@ const (
 	ParticipantUser                    // User.
 )
 
+// Request is a GPT request.
+type Request struct {
+	Messages []Message // Conversation messages.
+}
+
+// Response is a GPT response.
+type Response struct {
+	Text  string       // Transformed text.
+	Usage openai.Usage // Token usage.
+}
+
 // Generate generates a new message from the input stream.
-func (g *GPT) Generate(ctx context.Context, messages []Message) (string, error) {
-	request := g.createChatCompletionRequest(messages)
+func (g *GPT) Generate(ctx context.Context, messages []Message) (Response, error) {
+	request, err := g.createChatCompletionRequest(messages)
+	if err != nil {
+		return Response{}, err
+	}
 
 	for _, m := range request.Messages {
 		log.Debug().Str("role", m.Role).Str("content", m.Content).Str("dir", "out").Msg("gpt request")
@@ -54,7 +69,7 @@ func (g *GPT) Generate(ctx context.Context, messages []Message) (string, error) 
 
 	response, err := g.client.CreateChatCompletion(ctx, request)
 	if err != nil {
-		return "", err
+		return Response{}, err
 	}
 
 	for _, m := range response.Choices {
@@ -83,11 +98,18 @@ func (g *GPT) Generate(ctx context.Context, messages []Message) (string, error) 
 		transformedText = transformedOutput.OutputMarkdown
 	}
 
-	return transformedText, nil
+	return Response{
+		Text:  transformedText,
+		Usage: response.Usage,
+	}, nil
 }
 
-func (g *GPT) createChatCompletionRequest(messages []Message) openai.ChatCompletionRequest {
-	cfg := loadGTPConfig()
+func (g *GPT) createChatCompletionRequest(messages []Message) (openai.ChatCompletionRequest, error) {
+	cfg, err := loadGTPConfig()
+	if err != nil {
+		return openai.ChatCompletionRequest{}, err
+	}
+
 	req := openai.ChatCompletionRequest{
 		Model:               cfg.Model.Name,
 		MaxCompletionTokens: cfg.Model.MaxCompletionTokens,
@@ -131,7 +153,7 @@ func (g *GPT) createChatCompletionRequest(messages []Message) openai.ChatComplet
 		Content: "Output format: JSON object with one string field: 'output_markdown'. 'output_markdown' is the response text in Markdown format.",
 	})
 
-	return req
+	return req, nil
 }
 
 type gptConfig struct {
@@ -152,7 +174,7 @@ type gptModelConfig struct {
 	Verbosity           string             `yaml:"verbosity,omitempty"`
 }
 
-func loadGTPConfig() *gptConfig {
+func loadGTPConfig() (*gptConfig, error) {
 	const defaultSourcePath = "./conf/gpt.yaml"
 	sourcePath := os.Getenv("CONFIG_PATH")
 	if sourcePath == "" {
@@ -162,17 +184,25 @@ func loadGTPConfig() *gptConfig {
 	raw, err := os.ReadFile(sourcePath)
 	if err != nil {
 		log.Error().Err(err).Str("path", sourcePath).Msg("unable to load gpt config")
-		return &defaultGTPConfig
+		return nil, err
 	}
 
 	var cfg gptConfig
 	err = yaml.Unmarshal(raw, &cfg)
 	if err != nil {
 		log.Error().Err(err).Str("path", sourcePath).Msg("unable to parse gpt config")
-		return &defaultGTPConfig
+		return nil, err
 	}
 
-	return &cfg
+	promptPath := filepath.Join(filepath.Dir(sourcePath), "PROMPT.md")
+	promptRaw, err := os.ReadFile(promptPath)
+	if err != nil {
+		log.Error().Err(err).Str("path", promptPath).Msg("unable to load prompt")
+		return nil, err
+	}
+
+	cfg.Prompt = string(promptRaw)
+	return &cfg, nil
 }
 
 var defaultGTPConfig = gptConfig{
