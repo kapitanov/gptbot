@@ -3,3 +3,4 @@ bin
 gptbot
 gptbot.exe
 var
+.DS_Store
