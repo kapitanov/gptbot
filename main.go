@@ -25,7 +25,8 @@ import (
 
 func main() {
 	rootCmd := &cobra.Command{
-		Use: "gptbot",
+		Use:     "gptbot",
+		Version: "latest",
 	}
 
 	verbose := rootCmd.PersistentFlags().BoolP("verbose", "v", false, "enable verbose logs")
@@ -37,7 +38,7 @@ func main() {
 			zerolog.SetGlobalLevel(zerolog.DebugLevel)
 		}
 		if *quiet {
-			zerolog.SetGlobalLevel(zerolog.InfoLevel)
+			zerolog.SetGlobalLevel(zerolog.ErrorLevel)
 		}
 
 		log.Logger = log.Output(zerolog.ConsoleWriter{

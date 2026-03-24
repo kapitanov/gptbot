@@ -9,7 +9,6 @@ require (
 	github.com/openai/openai-go/v3 v3.29.0
 	github.com/pkg/errors v0.9.1
 	github.com/rs/zerolog v1.34.0
-	github.com/sashabaranov/go-openai v1.41.2
 	github.com/spf13/cobra v1.10.2
 	gopkg.in/telebot.v4 v4.0.0-beta.7
 	gopkg.in/yaml.v3 v3.0.1
