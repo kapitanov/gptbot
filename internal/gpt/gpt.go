@@ -7,13 +7,18 @@ import (
 	"path/filepath"
 
 	"github.com/rs/zerolog/log"
-	"github.com/sashabaranov/go-openai"
+	// "github.com/sashabaranov/go-openai"
+	"github.com/openai/openai-go/v3"
+	"github.com/openai/openai-go/v3/option"
+	"github.com/openai/openai-go/v3/packages/param"
+	"github.com/openai/openai-go/v3/responses"
+	"github.com/openai/openai-go/v3/shared"
 	"gopkg.in/yaml.v3"
 )
 
 // GPT is a GPT-3 text transformer.
 type GPT struct {
-	client *openai.Client
+	client openai.Client
 }
 
 // MaxConversationDepth limits conversation depth.
@@ -21,9 +26,9 @@ const MaxConversationDepth = 5
 
 // New creates a new GPT-3 text transformer.
 func New(token string) (*GPT, error) {
-	client := openai.NewClient(token)
+	client := openai.NewClient(option.WithAPIKey(token))
 
-	_, err := client.ListModels(context.Background())
+	_, err := client.Models.List(context.Background())
 	if err != nil {
 		return nil, err
 	}
@@ -52,8 +57,8 @@ type Request struct {
 
 // Response is a GPT response.
 type Response struct {
-	Text  string       // Transformed text.
-	Usage openai.Usage // Token usage.
+	Text  string                  // Transformed text.
+	Usage responses.ResponseUsage // Token usage.
 }
 
 // Generate generates a new message from the input stream.
@@ -63,31 +68,14 @@ func (g *GPT) Generate(ctx context.Context, messages []Message) (Response, error
 		return Response{}, err
 	}
 
-	for _, m := range request.Messages {
-		log.Debug().Str("role", m.Role).Str("content", m.Content).Str("dir", "out").Msg("gpt request")
-	}
-
-	response, err := g.client.CreateChatCompletion(ctx, request)
+	response, err := g.client.Responses.New(ctx, request)
 	if err != nil {
 		return Response{}, err
 	}
 
-	for _, m := range response.Choices {
-		log.Debug().Str("role", m.Message.Role).
-			Str("content", m.Message.Content).
-			Str("finish", string(m.FinishReason)).
-			Msg("gpt response")
-	}
+	log.Debug().Str("model", response.Model).Int64("tokens", response.Usage.TotalTokens).Msg("gpt stats")
 
-	log.Debug().
-		Str("object", response.Object).
-		Str("model", response.Model).
-		Int("tokens", response.Usage.TotalTokens).
-		Int("prompt", response.Usage.PromptTokens).
-		Int("response", response.Usage.CompletionTokens).
-		Msg("gpt stats")
-
-	transformedText := response.Choices[0].Message.Content
+	transformedText := response.OutputText()
 
 	type jsonOutput struct {
 		OutputMarkdown string `json:"output_markdown"`
@@ -104,30 +92,19 @@ func (g *GPT) Generate(ctx context.Context, messages []Message) (Response, error
 	}, nil
 }
 
-func (g *GPT) createChatCompletionRequest(messages []Message) (openai.ChatCompletionRequest, error) {
+func (g *GPT) createChatCompletionRequest(messages []Message) (responses.ResponseNewParams, error) {
 	cfg, err := loadGTPConfig()
 	if err != nil {
-		return openai.ChatCompletionRequest{}, err
+		return responses.ResponseNewParams{}, err
 	}
 
-	req := openai.ChatCompletionRequest{
-		Model:               cfg.Model.Name,
-		MaxCompletionTokens: cfg.Model.MaxCompletionTokens,
-		Temperature:         cfg.Model.Temperature,
-		TopP:                cfg.Model.TopP,
-		N:                   cfg.Model.N,
-		PresencePenalty:     cfg.Model.PresencePenalty,
-		Seed:                cfg.Model.Seed,
-		FrequencyPenalty:    cfg.Model.FrequencyPenalty,
-		ServiceTier:         cfg.Model.ServiceTier,
-		Verbosity:           cfg.Model.Verbosity,
-		ResponseFormat: &openai.ChatCompletionResponseFormat{
-			Type: openai.ChatCompletionResponseFormatTypeJSONObject,
-		},
-		Messages: []openai.ChatCompletionMessage{
-			{
-				Role:    openai.ChatMessageRoleSystem,
-				Content: cfg.Prompt,
+	itemsList := []responses.ResponseInputItemUnionParam{
+		{
+			OfMessage: &responses.EasyInputMessageParam{
+				Role: responses.EasyInputMessageRoleSystem,
+				Content: responses.EasyInputMessageContentUnionParam{
+					OfString: param.Opt[string]{Value: cfg.Prompt},
+				},
 			},
 		},
 	}
@@ -137,21 +114,47 @@ func (g *GPT) createChatCompletionRequest(messages []Message) (openai.ChatComple
 	}
 
 	for _, message := range messages {
-		role := openai.ChatMessageRoleUser
+		role := responses.EasyInputMessageRoleUser
 		if message.Participant == ParticipantBot {
-			role = openai.ChatMessageRoleAssistant
+			role = responses.EasyInputMessageRoleAssistant
 		}
 
-		req.Messages = append(req.Messages, openai.ChatCompletionMessage{
-			Role:    role,
-			Content: message.Text,
+		itemsList = append(itemsList, responses.ResponseInputItemUnionParam{
+			OfMessage: &responses.EasyInputMessageParam{
+				Role: role,
+				Content: responses.EasyInputMessageContentUnionParam{
+					OfString: param.Opt[string]{Value: message.Text},
+				},
+			},
 		})
 	}
 
-	req.Messages = append(req.Messages, openai.ChatCompletionMessage{
-		Role:    openai.ChatMessageRoleSystem,
-		Content: "Output format: JSON object with one string field: 'output_markdown'. 'output_markdown' is the response text in Markdown format.",
-	})
+	req := responses.ResponseNewParams{
+		Model: shared.ResponsesModel(cfg.Model.Name),
+		Text: responses.ResponseTextConfigParam{
+			Format: responses.ResponseFormatTextConfigUnionParam{
+				OfJSONSchema: &responses.ResponseFormatTextJSONSchemaConfigParam{
+					Name: "output",
+					Schema: map[string]any{
+						"type": "object",
+						"properties": map[string]any{
+							"output_markdown": map[string]any{
+								"type":        "string",
+								"description": "The response text in Markdown format.",
+								"example":     "Hello, *world*!",
+							},
+						},
+						"required":             []string{"output_markdown"},
+						"additionalProperties": false,
+					},
+					Strict: param.Opt[bool]{Value: true},
+				},
+			},
+		},
+		Input: responses.ResponseNewParamsInputUnion{
+			OfInputItemList: itemsList,
+		},
+	}
 
 	return req, nil
 }
@@ -162,16 +165,7 @@ type gptConfig struct {
 }
 
 type gptModelConfig struct {
-	Name                string             `yaml:"name"`
-	MaxCompletionTokens int                `yaml:"max_completion_tokens,omitempty"`
-	Temperature         float32            `yaml:"temperature,omitempty"`
-	TopP                float32            `yaml:"top_p,omitempty"`
-	N                   int                `yaml:"n,omitempty"`
-	PresencePenalty     float32            `yaml:"presence_penalty,omitempty"`
-	Seed                *int               `yaml:"seed,omitempty"`
-	FrequencyPenalty    float32            `yaml:"frequency_penalty,omitempty"`
-	ServiceTier         openai.ServiceTier `yaml:"service_tier,omitempty"`
-	Verbosity           string             `yaml:"verbosity,omitempty"`
+	Name string `yaml:"name"`
 }
 
 func loadGTPConfig() (*gptConfig, error) {
@@ -203,9 +197,4 @@ func loadGTPConfig() (*gptConfig, error) {
 
 	cfg.Prompt = string(promptRaw)
 	return &cfg, nil
-}
-
-var defaultGTPConfig = gptConfig{
-	Model:  gptModelConfig{Name: "gpt-3.5-turbo", Temperature: 0.9},
-	Prompt: "Summarize the following text.",
 }
