@@ -6,17 +6,16 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/rs/zerolog/log"
-	// "github.com/sashabaranov/go-openai"
 	"github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
 	"github.com/openai/openai-go/v3/packages/param"
 	"github.com/openai/openai-go/v3/responses"
 	"github.com/openai/openai-go/v3/shared"
+	"github.com/rs/zerolog/log"
 	"gopkg.in/yaml.v3"
 )
 
-// GPT is a GPT-3 text transformer.
+// GPT is a GPT-5 text transformer.
 type GPT struct {
 	client openai.Client
 }
@@ -52,18 +51,20 @@ const (
 
 // Request is a GPT request.
 type Request struct {
-	Messages []Message // Conversation messages.
+	Message        string
+	PrevResponseID string
 }
 
 // Response is a GPT response.
 type Response struct {
+	ID    string
 	Text  string                  // Transformed text.
 	Usage responses.ResponseUsage // Token usage.
 }
 
 // Generate generates a new message from the input stream.
-func (g *GPT) Generate(ctx context.Context, messages []Message) (Response, error) {
-	request, err := g.createChatCompletionRequest(messages)
+func (g *GPT) Generate(ctx context.Context, req Request) (Response, error) {
+	request, err := g.prepareGTPRequest(req)
 	if err != nil {
 		return Response{}, err
 	}
@@ -87,47 +88,39 @@ func (g *GPT) Generate(ctx context.Context, messages []Message) (Response, error
 	}
 
 	return Response{
+		ID:    response.ID,
 		Text:  transformedText,
 		Usage: response.Usage,
 	}, nil
 }
 
-func (g *GPT) createChatCompletionRequest(messages []Message) (responses.ResponseNewParams, error) {
+func (g *GPT) prepareGTPRequest(request Request) (responses.ResponseNewParams, error) {
 	cfg, err := loadGTPConfig()
 	if err != nil {
 		return responses.ResponseNewParams{}, err
 	}
 
-	itemsList := []responses.ResponseInputItemUnionParam{
-		{
+	var itemsList []responses.ResponseInputItemUnionParam
+
+	if request.PrevResponseID == "" {
+		itemsList = append(itemsList, responses.ResponseInputItemUnionParam{
 			OfMessage: &responses.EasyInputMessageParam{
 				Role: responses.EasyInputMessageRoleSystem,
 				Content: responses.EasyInputMessageContentUnionParam{
 					OfString: param.Opt[string]{Value: cfg.Prompt},
 				},
 			},
-		},
-	}
-
-	if len(messages) > MaxConversationDepth {
-		messages = messages[len(messages)-MaxConversationDepth:]
-	}
-
-	for _, message := range messages {
-		role := responses.EasyInputMessageRoleUser
-		if message.Participant == ParticipantBot {
-			role = responses.EasyInputMessageRoleAssistant
-		}
-
-		itemsList = append(itemsList, responses.ResponseInputItemUnionParam{
-			OfMessage: &responses.EasyInputMessageParam{
-				Role: role,
-				Content: responses.EasyInputMessageContentUnionParam{
-					OfString: param.Opt[string]{Value: message.Text},
-				},
-			},
 		})
 	}
+
+	itemsList = append(itemsList, responses.ResponseInputItemUnionParam{
+		OfMessage: &responses.EasyInputMessageParam{
+			Role: responses.EasyInputMessageRoleUser,
+			Content: responses.EasyInputMessageContentUnionParam{
+				OfString: param.Opt[string]{Value: request.Message},
+			},
+		},
+	})
 
 	req := responses.ResponseNewParams{
 		Model: shared.ResponsesModel(cfg.Model.Name),
@@ -141,7 +134,6 @@ func (g *GPT) createChatCompletionRequest(messages []Message) (responses.Respons
 							"output_markdown": map[string]any{
 								"type":        "string",
 								"description": "The response text in Markdown format.",
-								"example":     "Hello, *world*!",
 							},
 						},
 						"required":             []string{"output_markdown"},
@@ -154,6 +146,10 @@ func (g *GPT) createChatCompletionRequest(messages []Message) (responses.Respons
 		Input: responses.ResponseNewParamsInputUnion{
 			OfInputItemList: itemsList,
 		},
+	}
+
+	if request.PrevResponseID != "" {
+		req.PreviousResponseID = param.Opt[string]{Value: request.PrevResponseID}
 	}
 
 	return req, nil

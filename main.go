@@ -167,10 +167,9 @@ func chatCommand() *cobra.Command {
 				cancel()
 			}()
 
-			var messages []gpt.Message
-
 			_, _ = fmt.Fprintf(os.Stderr, "(type \"/q\" to quit)\n")
 
+			var lastResponseID string
 			for {
 				line, err := readLine()
 				if err != nil {
@@ -192,13 +191,8 @@ func chatCommand() *cobra.Command {
 					return nil
 				}
 
-				messages = append(messages, gpt.Message{
-					Participant: gpt.ParticipantUser,
-					Text:        line,
-				})
-
 				_, _ = fmt.Fprintf(os.Stderr, "... ")
-				response, err := g.Generate(ctx, messages)
+				response, err := g.Generate(ctx, gpt.Request{Message: line, PrevResponseID: lastResponseID})
 				if err != nil {
 					if errors.Is(err, context.Canceled) {
 						return nil
@@ -210,10 +204,7 @@ func chatCommand() *cobra.Command {
 				_, _ = fmt.Fprintf(os.Stderr, "\r< %s\n\n", response.Text)
 				_, _ = fmt.Fprintf(os.Stderr, "# %d tokens\n\n", response.Usage.TotalTokens)
 
-				messages = append(messages, gpt.Message{
-					Participant: gpt.ParticipantBot,
-					Text:        response.Text,
-				})
+				lastResponseID = response.ID
 			}
 			return nil
 		},

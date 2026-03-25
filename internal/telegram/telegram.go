@@ -55,6 +55,11 @@ func New(options Options) (*Telegram, error) {
 
 	tg.setupHandlers()
 
+	tg.bot.SetCommands([]telebot.Command{
+		{Text: "start", Description: "Start the bot"},
+		{Text: "reset", Description: "Reset the conversation"},
+	})
+
 	return tg, nil
 }
 

@@ -6,10 +6,8 @@ import (
 	"strings"
 
 	"github.com/kapitanov/gptbot/internal/gpt"
-	"github.com/kapitanov/gptbot/internal/storage"
 	"github.com/kapitanov/gptbot/internal/telegram/mdparser"
 	"github.com/kapitanov/gptbot/internal/telegram/texts"
-	"github.com/pkg/errors"
 	"github.com/rs/zerolog/log"
 	"gopkg.in/telebot.v4"
 )
@@ -43,9 +41,7 @@ func (tg *Telegram) generate(msg *telebot.Message, text, altText string) error {
 		return err
 	}
 
-	err := tg.storage.TX(msg.Sender.ID, func(chain *storage.MessageChain) error {
-		return tg.generateE(msg, text, chain)
-	})
+	err := tg.generateE(msg, text)
 	if err != nil {
 		log.Error().Err(err).
 			Str("username", msg.Sender.Username).
@@ -65,9 +61,15 @@ func (tg *Telegram) generate(msg *telebot.Message, text, altText string) error {
 	return nil
 }
 
-func (tg *Telegram) generateE(msg *telebot.Message, request string, chain *storage.MessageChain) error {
-	gptMessages, err := generateGPTMessages(msg, request, chain)
+func (tg *Telegram) generateE(msg *telebot.Message, request string) error {
+	request = normalizeText(request)
+	if request == "" {
+		return nil
+	}
+
+	lastResponseID, err := tg.storage.GetLastResponseID(msg.Sender.ID)
 	if err != nil {
+		log.Error().Err(err).Str("username", msg.Sender.Username).Int("msg", msg.ID).Msg("failed to get last response id")
 		return err
 	}
 
@@ -88,7 +90,7 @@ func (tg *Telegram) generateE(msg *telebot.Message, request string, chain *stora
 			Msg("failed to send typing notification")
 	}
 
-	response, err := tg.gpt.Generate(context.Background(), gptMessages)
+	response, err := tg.gpt.Generate(context.Background(), gpt.Request{Message: request, PrevResponseID: lastResponseID})
 	if err != nil {
 		return err
 	}
@@ -104,17 +106,9 @@ func (tg *Telegram) generateE(msg *telebot.Message, request string, chain *stora
 		return err
 	}
 
-	var replyToID *int
-	if msg.ReplyTo != nil {
-		replyToID = &msg.ReplyTo.ID
-	}
-	err = chain.Store(msg.ID, replyToID, storage.User, request)
+	err = tg.storage.SetLastResponseID(msg.Sender.ID, response.ID)
 	if err != nil {
-		return err
-	}
-
-	err = chain.Store(reply.ID, &msg.ID, storage.Bot, response.Text)
-	if err != nil {
+		log.Error().Err(err).Str("username", msg.Sender.Username).Int("msg", msg.ID).Msg("failed to get last response id")
 		return err
 	}
 
@@ -148,38 +142,6 @@ func (tg *Telegram) reply(msg, reply *telebot.Message, response gpt.Response) (*
 	}
 
 	return reply, nil
-}
-
-func generateGPTMessages(msg *telebot.Message, text string, chain *storage.MessageChain) ([]gpt.Message, error) {
-	text = normalizeText(text)
-	if text == "" {
-		return nil, errors.New("text is empty")
-	}
-
-	msgID := 0
-	if msg.ReplyTo != nil {
-		msgID = msg.ReplyTo.ID
-	}
-	storedMessages := chain.Read(msgID)
-
-	gptMessages := make([]gpt.Message, 0, len(storedMessages))
-	for _, storedMessage := range storedMessages {
-		gptMessage := gpt.Message{
-			Text:        storedMessage.Text,
-			Participant: gpt.ParticipantBot,
-		}
-		if storedMessage.Side == storage.User {
-			gptMessage.Participant = gpt.ParticipantUser
-		}
-
-		gptMessages = append(gptMessages, gptMessage)
-	}
-
-	gptMessages = append(gptMessages, gpt.Message{
-		Text:        text,
-		Participant: gpt.ParticipantUser,
-	})
-	return gptMessages, nil
 }
 
 func normalizeText(text string) string {

@@ -2,7 +2,6 @@ package storage
 
 import (
 	"os"
-	"slices"
 	"sync"
 
 	"github.com/pkg/errors"
@@ -31,8 +30,21 @@ func New(filename string) (*Storage, error) {
 	return s, nil
 }
 
-// TX runs a function within a transaction.
-func (s *Storage) TX(userID int64, fn func(chain *MessageChain) error) error {
+func (s *Storage) GetLastResponseID(userID int64) (string, error) {
+	var lastResponseID string
+	err := s.do(func(root *RootYAML, save func() error) error {
+		conversation, exists := root.Conversations[userID]
+		if !exists {
+			return nil
+		}
+
+		lastResponseID = conversation.LastResponseID
+		return nil
+	})
+	return lastResponseID, err
+}
+
+func (s *Storage) SetLastResponseID(userID int64, responseID string) error {
 	return s.do(func(root *RootYAML, save func() error) error {
 		conversation, exists := root.Conversations[userID]
 		if !exists {
@@ -40,14 +52,8 @@ func (s *Storage) TX(userID int64, fn func(chain *MessageChain) error) error {
 			root.Conversations[userID] = conversation
 		}
 
-		if conversation.Messages == nil {
-			conversation.Messages = make(map[int]*MessageYAML)
-		}
-
-		return fn(&MessageChain{
-			conversation: conversation,
-			save:         save,
-		})
+		conversation.LastResponseID = responseID
+		return save()
 	})
 }
 
@@ -113,61 +119,6 @@ func (s *Storage) store(root *RootYAML) error {
 	return nil
 }
 
-// MessageChain is a single conversation.
-type MessageChain struct {
-	conversation *ConversationYAML
-	save         func() error
-}
-
-// Store writes new message into the conversation.
-func (c *MessageChain) Store(msgID int, replyToID *int, side MessageSide, text string) error {
-	msg := MessageYAML{
-		ReplyTo: replyToID,
-		Side:    side,
-		Text:    text,
-	}
-	c.conversation.Messages[msgID] = &msg
-	return c.save()
-}
-
-// Store reads all messages from the conversation.
-func (c *MessageChain) Read(messageID int) []Message {
-	var messages []Message
-
-	for {
-		msg, ok := c.conversation.Messages[messageID]
-		if !ok {
-			break
-		}
-		messages = append(messages, Message{
-			Side: msg.Side,
-			Text: msg.Text,
-		})
-		if msg.ReplyTo == nil {
-			break
-		}
-
-		messageID = *msg.ReplyTo
-	}
-
-	slices.Reverse(messages)
-	return messages
-}
-
-// Message is a message in a conversation.
-type Message struct {
-	Side MessageSide // Conversation side.
-	Text string      // Message text.
-}
-
-// MessageSide is a side of conversation.
-type MessageSide string
-
-const (
-	Bot  MessageSide = "bot"  // Bot.
-	User MessageSide = "user" // User.
-)
-
 // RootYAML is a YAML model for data root.
 type RootYAML struct {
 	Conversations map[int64]*ConversationYAML `yaml:"conversations"` // Conversations.
@@ -175,12 +126,5 @@ type RootYAML struct {
 
 // ConversationYAML is a YAML model for conversation.
 type ConversationYAML struct {
-	Messages map[int]*MessageYAML `yaml:"messages"` // Messages.
-}
-
-// MessageYAML is a YAML model for a message.
-type MessageYAML struct {
-	ReplyTo *int        `yaml:"reply_to,omitempty"` // ID of message (if this one is a reply).
-	Side    MessageSide `yaml:"side"`               // Conversation side.
-	Text    string      `yaml:"text"`               // Message text.
+	LastResponseID string `yaml:"last_response_id"` // ID of the last response sent by the bot.
 }

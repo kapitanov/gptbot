@@ -9,6 +9,7 @@ import (
 
 func (tg *Telegram) setupHandlers() {
 	tg.bot.Handle("/start", tg.onStartCommand)
+	tg.bot.Handle("/reset", tg.onResetCommand)
 	tg.bot.Handle(telebot.OnText, tg.onText)
 	tg.bot.Handle(telebot.OnPhoto, tg.onPhoto)
 	tg.bot.Handle(telebot.OnVideo, tg.onVideo)
@@ -30,6 +31,29 @@ func (tg *Telegram) onStartCommand(ctx telebot.Context) error {
 		log.Error().Err(err).Str("username", msg.Sender.Username).Int("msg", msg.ID).Msg("failed to send welcome message")
 		return err
 	}
+
+	return nil
+}
+
+func (tg *Telegram) onResetCommand(ctx telebot.Context) error {
+	msg := ctx.Message()
+
+	if !tg.hasAccess(msg) {
+		return nil
+	}
+
+	err := tg.storage.SetLastResponseID(msg.Sender.ID, "")
+	if err != nil {
+		log.Error().Err(err).Str("username", msg.Sender.Username).Int("msg", msg.ID).Msg("failed to reset conversation")
+		return err
+	}
+
+	_, err = tg.bot.Send(msg.Sender, texts.Reset)
+	if err != nil {
+		log.Error().Err(err).Str("username", msg.Sender.Username).Int("msg", msg.ID).Msg("failed to send reset message")
+		return err
+	}
+
 	return nil
 }
 
