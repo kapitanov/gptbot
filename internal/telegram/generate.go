@@ -10,6 +10,7 @@ import (
 	"github.com/kapitanov/gptbot/internal/telegram/texts"
 	"github.com/rs/zerolog/log"
 	"gopkg.in/telebot.v4"
+	"gopkg.in/telebot.v4/react"
 )
 
 func (tg *Telegram) generate(msg *telebot.Message, text, altText string) error {
@@ -73,13 +74,21 @@ func (tg *Telegram) generateE(msg *telebot.Message, request string) error {
 		return err
 	}
 
-	reply, err := tg.bot.Reply(msg, texts.Thinking, telebot.Silent)
+	// reply, err := tg.bot.Reply(msg, texts.Thinking, telebot.Silent)
+	// if err != nil {
+	// 	log.Error().Err(err).
+	// 		Str("username", msg.Sender.Username).
+	// 		Int("msg", msg.ID).
+	// 		Msg("failed to reply")
+	// 	return err
+	// }
+
+	err = tg.bot.React(msg.Sender, msg, react.React(react.ThinkingFace))
 	if err != nil {
 		log.Error().Err(err).
 			Str("username", msg.Sender.Username).
 			Int("msg", msg.ID).
-			Msg("failed to reply")
-		return err
+			Msg("failed to send reaction")
 	}
 
 	err = tg.bot.Notify(msg.Sender, telebot.Typing)
@@ -95,7 +104,7 @@ func (tg *Telegram) generateE(msg *telebot.Message, request string) error {
 		return err
 	}
 
-	reply, err = tg.reply(msg, reply, response)
+	err = tg.reply(msg, response)
 	if err != nil {
 		log.Error().Err(err).
 			Str("username", msg.Sender.Username).
@@ -115,33 +124,32 @@ func (tg *Telegram) generateE(msg *telebot.Message, request string) error {
 	log.Info().
 		Str("username", msg.Sender.Username).
 		Int("msg", msg.ID).
+		Str("last", lastResponseID).
 		Str("request", request).
 		Str("response", response.Text).
+		Int64("tokens", response.Usage.TotalTokens).
 		Msg("generated a reply")
 
 	return nil
 }
 
-func (tg *Telegram) reply(msg, reply *telebot.Message, response gpt.Response) (*telebot.Message, error) {
+func (tg *Telegram) reply(msg *telebot.Message, response gpt.Response) error {
 	const maxTextLength = 4096 - 1
 
 	transformResult := mdparser.Transform(mdparser.TransformRequest{Text: response.Text, MaxLength: maxTextLength})
 
-	_ = tg.bot.Delete(reply)
-
 	for _, chunk := range transformResult.Chunks {
-		var err error
-		reply, err = tg.bot.Reply(msg, chunk.Text, telebot.Silent, telebot.ModeMarkdownV2)
+		_, err := tg.bot.Reply(msg, chunk.Text, telebot.Silent, telebot.ModeMarkdownV2)
 		if err != nil {
 			log.Error().Err(err).
 				Str("username", msg.Sender.Username).
 				Int("msg", msg.ID).
 				Msg("failed to reply")
-			return nil, err
+			return err
 		}
 	}
 
-	return reply, nil
+	return nil
 }
 
 func normalizeText(text string) string {
