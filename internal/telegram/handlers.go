@@ -48,6 +48,8 @@ func (tg *Telegram) onResetCommand(ctx telebot.Context) error {
 		return err
 	}
 
+	log.Info().Str("username", msg.Sender.Username).Int("msg", msg.ID).Msg("conversation reset")
+
 	_, err = tg.bot.Send(msg.Sender, texts.Reset)
 	if err != nil {
 		log.Error().Err(err).Str("username", msg.Sender.Username).Int("msg", msg.ID).Msg("failed to send reset message")
