@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/signal"
 	"strings"
-	"syscall"
 	"time"
 
 	_ "github.com/joho/godotenv/autoload"
@@ -47,23 +46,22 @@ func main() {
 	rootCmd.AddCommand(runCommand())
 	rootCmd.AddCommand(chatCommand())
 
-	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM, syscall.SIGINT, syscall.SIGQUIT)
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()
 
-	rootCmd.SetContext(ctx)
-
-	if err := rootCmd.Execute(); err != nil {
+	if err := rootCmd.ExecuteContext(ctx); err != nil {
 		log.Error().Msg(err.Error())
 		os.Exit(1)
 	}
 }
 
 func withLLMProvider(cmd *cobra.Command) func(history llmprovider.History) (*llmprovider.LLM, error) {
-	var llmURL, llmToken, llmModel, llmPromptFilePath string
+	var llmURL, llmToken, llmModel, llmPromptFilePath, llmReasoningEffort string
 	cmd.Flags().StringVar(&llmURL, "llm-url", "", "LLM provider URL (default from $GPTBOT_LLM_URL, or \"https://api.openai.com/v1/\")")
 	cmd.Flags().StringVar(&llmToken, "llm-token", "", "LLM provider token (default from $GPTBOT_LLM_TOKEN)")
 	cmd.Flags().StringVar(&llmModel, "llm-model", "", "LLM model (default from $GPTBOT_LLM_MODEL)")
 	cmd.Flags().StringVar(&llmPromptFilePath, "llm-prompt", "", "LLM prompt file path (default from $GPTBOT_LLM_PROMPT)")
+	cmd.Flags().StringVar(&llmReasoningEffort, "llm-reasoning", "", "LLM reasoning effort (default from $GPTBOT_LLM_REASONING)")
 
 	return func(history llmprovider.History) (*llmprovider.LLM, error) {
 		if llmURL == "" {
@@ -88,13 +86,22 @@ func withLLMProvider(cmd *cobra.Command) func(history llmprovider.History) (*llm
 				return nil, errors.New("llm prompt file path is required")
 			}
 		}
+		if llmReasoningEffort == "" {
+			llmReasoningEffort = os.Getenv("GPTBOT_LLM_REASONING")
+
+			if llmReasoningEffort == "" {
+				llmReasoningEffort = llmprovider.DefaultReasoningEffort
+			}
+		}
 
 		llm, err := llmprovider.New(llmprovider.Parameters{
-			URL:            llmURL,
-			Token:          llmToken,
-			Model:          llmModel,
-			PromptFilePath: llmPromptFilePath,
-			History:        history,
+			URL:             llmURL,
+			Token:           llmToken,
+			Model:           llmModel,
+			PromptFilePath:  llmPromptFilePath,
+			History:         history,
+			EnableTracing:   os.Getenv("GPTBOT_LLM_TRACE") != "",
+			ReasoningEffort: llmReasoningEffort,
 		})
 		if err != nil {
 			return nil, err
@@ -147,10 +154,11 @@ func withTelegramBot(cmd *cobra.Command) func(s *storage.Storage, llm *llmprovid
 		}
 
 		tg, err := telegram.New(telegram.Options{
-			Token:         tgToken,
-			AccessChecker: p,
-			LLM:           llm,
-			Storage:       s,
+			Token:                 tgToken,
+			AccessChecker:         p,
+			LLM:                   llm,
+			Storage:               s,
+			EnableReasoningOutput: os.Getenv("GPTBOT_LLM_REASONING_OUTPUT") != "",
 		})
 		if err != nil {
 			return nil, err

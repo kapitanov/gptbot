@@ -2,7 +2,6 @@ package telegram
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"html"
 	"strings"
@@ -79,8 +78,22 @@ func (tg *Telegram) generateE(msg *telebot.Message, request string) error {
 		return err
 	}
 
-	_, err = sendRichMessage(tg.bot, msg.Sender, inputRichMessage{
-		Markdown: response.Text,
+	markdown := response.Text
+
+	if tg.enableReasoningOutput && response.Reasoning != "" {
+		markdown = fmt.Sprintf("<details><summary>Reasoning</summary>\n\n%s\n\n<hr/>End of reasoning\n\n</details>\n\n%s", html.EscapeString(response.Reasoning), markdown)
+	}
+
+	markdown = fmt.Sprintf(
+		"%s\n\n<sub>%s tokens, generated in %.2fs, %.1f tokens/sec</sub>",
+		markdown,
+		prettyTokens(response.Usage.TotalTokens),
+		response.Duration.Seconds(),
+		float64(response.Usage.TotalTokens)/response.Duration.Seconds(),
+	)
+
+	_, err = tg.bot.Send(msg.Sender, &telebot.InputRichMessage{
+		Markdown: markdown,
 	})
 	if err != nil {
 		log.Error().Err(err).
@@ -116,6 +129,13 @@ func normalizeText(text string) string {
 	return text
 }
 
+func prettyTokens(tokens int64) string {
+	if tokens < 1000 {
+		return fmt.Sprintf("%d", tokens)
+	}
+	return fmt.Sprintf("%.1fk", float64(tokens)/1000)
+}
+
 func (tg *Telegram) withThinkingMsg(msg *telebot.Message) func() {
 	done := make(chan struct{})
 	ctx, cancel := context.WithCancel(context.Background())
@@ -124,10 +144,10 @@ func (tg *Telegram) withThinkingMsg(msg *telebot.Message) func() {
 		defer close(done)
 
 		const draftID = 1
-		thinking := inputRichMessage{
+		thinking := &telebot.InputRichMessage{
 			HTML: fmt.Sprintf(`<tg-thinking>%s</tg-thinking>`, html.EscapeString(texts.Thinking)),
 		}
-		err := sendRichMessageDraft(tg.bot, msg.Sender, draftID, thinking)
+		err := tg.bot.SendRichDraft(msg.Sender, draftID, thinking)
 		if err != nil {
 			log.Error().Err(err).
 				Str("username", msg.Sender.Username).
@@ -140,7 +160,7 @@ func (tg *Telegram) withThinkingMsg(msg *telebot.Message) func() {
 			case <-ctx.Done():
 				return
 			case <-time.After(10 * time.Second):
-				err := sendRichMessageDraft(tg.bot, msg.Sender, draftID, thinking)
+				err := tg.bot.SendRichDraft(msg.Sender, draftID, thinking)
 				if err != nil {
 					log.Error().Err(err).
 						Str("username", msg.Sender.Username).
@@ -155,64 +175,4 @@ func (tg *Telegram) withThinkingMsg(msg *telebot.Message) func() {
 		cancel()
 		<-done
 	}
-}
-
-type inputRichMessage struct {
-	HTML                string `json:"html,omitempty"`
-	Markdown            string `json:"markdown,omitempty"`
-	IsRTL               bool   `json:"is_rtl,omitempty"`
-	SkipEntityDetection bool   `json:"skip_entity_detection,omitempty"`
-}
-
-// sendRichMessage implements https://core.telegram.org/bots/api#sendrichmessage.
-func sendRichMessage(b *telebot.Bot, to telebot.Recipient, msg inputRichMessage) (*telebot.Message, error) {
-	// see https://core.telegram.org/bots/api#sendrichmessage
-	params := map[string]interface{}{
-		"chat_id":      to.Recipient(),
-		"rich_message": msg,
-	}
-
-	data, err := b.Raw("sendRichMessage", params)
-	if err != nil {
-		return nil, err
-	}
-
-	return extractMessage(data)
-}
-
-// sendRichMessageDraft implements https://core.telegram.org/bots/api#sendrichmessagedraft.
-func sendRichMessageDraft(b *telebot.Bot, to telebot.Recipient, draftID int, msg inputRichMessage) error {
-	if to == nil {
-		return telebot.ErrBadRecipient
-	}
-
-	params := map[string]interface{}{
-		"chat_id":      to.Recipient(),
-		"draft_id":     draftID,
-		"rich_message": msg,
-	}
-
-	_, err := b.Raw("sendRichMessageDraft", params)
-	return err
-}
-
-// extractMessage extracts common Message result from given data.
-// Should be called after extractOk or b.Raw() to handle possible errors.
-func extractMessage(data []byte) (*telebot.Message, error) {
-	var resp struct {
-		Result *telebot.Message
-	}
-	if err := json.Unmarshal(data, &resp); err != nil {
-		var resp struct {
-			Result bool
-		}
-		if err := json.Unmarshal(data, &resp); err != nil {
-			return nil, err
-		}
-		if resp.Result {
-			return nil, telebot.ErrTrueResult
-		}
-		return nil, err
-	}
-	return resp.Result, nil
 }

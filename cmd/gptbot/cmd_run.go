@@ -37,8 +37,10 @@ func runCommand() *cobra.Command {
 		}
 		defer tg.Close()
 
+		ctx := cmd.Context()
+
 		log.Info().Msg("press <ctrl+c> to exit")
-		tg.Run(cmd.Context())
+		tg.Run(ctx)
 		log.Info().Msg("good bye")
 		return nil
 	}

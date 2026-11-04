@@ -15,18 +15,20 @@ import (
 
 // Telegram is a telegram bot.
 type Telegram struct {
-	bot           *telebot.Bot
-	storage       *storage.Storage
-	llm           *llmprovider.LLM
-	accessChecker AccessChecker
+	bot                   *telebot.Bot
+	storage               *storage.Storage
+	llm                   *llmprovider.LLM
+	accessChecker         AccessChecker
+	enableReasoningOutput bool
 }
 
 // Options is a telegram bot options.
 type Options struct {
-	Token         string           // Telegram bot token.
-	LLM           *llmprovider.LLM // LLM client.
-	AccessChecker AccessChecker    // Access checker.
-	Storage       *storage.Storage // Storage.
+	Token                 string           // Telegram bot token.
+	LLM                   *llmprovider.LLM // LLM client.
+	AccessChecker         AccessChecker    // Access checker.
+	Storage               *storage.Storage // Storage.
+	EnableReasoningOutput bool             // Enable reasoning output from LLM.
 }
 
 // AccessChecker checks access to telegram chats.
@@ -48,16 +50,17 @@ func New(options Options) (*Telegram, error) {
 	log.Info().Int64("id", bot.Me.ID).Str("username", bot.Me.Username).Msg("connected to telegram")
 
 	tg := &Telegram{
-		bot:           bot,
-		accessChecker: options.AccessChecker,
-		llm:           options.LLM,
-		storage:       options.Storage,
+		bot:                   bot,
+		accessChecker:         options.AccessChecker,
+		llm:                   options.LLM,
+		storage:               options.Storage,
+		enableReasoningOutput: options.EnableReasoningOutput,
 	}
 
 	tg.setupHandlers()
 
 	tg.bot.SetCommands([]telebot.Command{
-		{Text: "reset", Description: "Reset the conversation"},
+		{Text: "clear", Description: "Clear the conversation"},
 	})
 
 	return tg, nil

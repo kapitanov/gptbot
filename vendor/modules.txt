@@ -167,9 +167,6 @@ github.com/openai/openai-go/v3/responses
 github.com/openai/openai-go/v3/shared
 github.com/openai/openai-go/v3/shared/constant
 github.com/openai/openai-go/v3/webhooks
-# github.com/pkg/errors v0.9.1
-## explicit
-github.com/pkg/errors
 # github.com/rivo/uniseg v0.4.7
 ## explicit; go 1.18
 github.com/rivo/uniseg
@@ -239,9 +236,6 @@ golang.org/x/text/internal/tag
 golang.org/x/text/language
 golang.org/x/text/transform
 golang.org/x/text/unicode/norm
-# gopkg.in/telebot.v4 v4.0.0-beta.9
+# gopkg.in/telebot.v4 v4.0.0-beta.10
 ## explicit; go 1.16
 gopkg.in/telebot.v4
-# gopkg.in/yaml.v3 v3.0.1
-## explicit
-gopkg.in/yaml.v3

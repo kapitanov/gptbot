@@ -3,7 +3,9 @@ package llmprovider
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/openai/openai-go/v3"
@@ -14,12 +16,16 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+const DefaultReasoningEffort = string(shared.ReasoningEffortMinimal)
+
 // LLM is a LLM client.
 type LLM struct {
-	client         openai.Client
-	model          string
-	promptFilePath string
-	history        History
+	client          openai.Client
+	model           string
+	promptFilePath  string
+	history         History
+	enableTracing   bool
+	reasoningEffort shared.ReasoningEffort
 }
 
 // MaxConversationDepth limits conversation depth.
@@ -27,11 +33,13 @@ const MaxConversationDepth = 5
 
 // Parameters holds the configuration for the LLM client.
 type Parameters struct {
-	URL            string
-	Token          string
-	Model          string
-	PromptFilePath string
-	History        History
+	URL             string
+	Token           string
+	Model           string
+	PromptFilePath  string
+	History         History
+	EnableTracing   bool
+	ReasoningEffort string
 }
 
 // History represents the conversation history storage.
@@ -60,17 +68,23 @@ func New(parameters Parameters) (*LLM, error) {
 
 	client := openai.NewClient(clientOptions...)
 
-	logEvent.Str("model", parameters.Model).Str("prompt", parameters.PromptFilePath).Msg("llm client configuration")
+	logEvent.
+		Str("model", parameters.Model).
+		Str("prompt", parameters.PromptFilePath).
+		Str("reasoning", parameters.ReasoningEffort).
+		Msg("llm client configuration")
 	_, err := client.Models.List(context.Background())
 	if err != nil {
 		return nil, err
 	}
 
 	return &LLM{
-		client:         client,
-		model:          parameters.Model,
-		promptFilePath: parameters.PromptFilePath,
-		history:        parameters.History,
+		client:          client,
+		model:           parameters.Model,
+		promptFilePath:  parameters.PromptFilePath,
+		history:         parameters.History,
+		enableTracing:   parameters.EnableTracing,
+		reasoningEffort: shared.ReasoningEffort(parameters.ReasoningEffort),
 	}, nil
 }
 
@@ -96,11 +110,13 @@ type Request struct {
 
 // Response is a GPT response.
 type Response struct {
-	ID       string
-	Text     string                  // Transformed text.
-	Usage    responses.ResponseUsage // Token usage.
-	Model    string                  // Model name.
-	Duration time.Duration           // Duration of the response.
+	ID          string
+	Text        string                  // Transformed text.
+	Reasoning   string                  // Reasoning output.
+	Usage       responses.ResponseUsage // Token usage.
+	TotalTokens int64                   // Total number of tokens used.
+	Model       string                  // Model name.
+	Duration    time.Duration           // Duration of the response.
 }
 
 // Generate generates a new message from the input stream.
@@ -115,37 +131,43 @@ func (llm *LLM) Generate(ctx context.Context, req Request) (Response, error) {
 		return Response{}, err
 	}
 
-	transformedText := response.OutputText()
-
-	type jsonOutput struct {
-		OutputMarkdown string `json:"output_markdown"`
-	}
-
-	var transformedOutput jsonOutput
-	if err = json.Unmarshal([]byte(transformedText), &transformedOutput); err == nil {
-		transformedText = transformedOutput.OutputMarkdown
-	}
-
 	r := Response{
-		ID:       response.ID,
-		Text:     transformedText,
-		Usage:    response.Usage,
-		Model:    response.Model,
-		Duration: time.Second * time.Duration(response.CompletedAt-response.CreatedAt),
+		ID:          response.ID,
+		Text:        response.OutputText(),
+		Reasoning:   outputReasoning(response),
+		Usage:       response.Usage,
+		Model:       response.Model,
+		TotalTokens: response.Usage.TotalTokens,
+		Duration:    time.Second * time.Duration(response.CompletedAt-response.CreatedAt),
 	}
 
 	if err = llm.updateHistory(req, request.Input.OfInputItemList, r); err != nil {
 		return Response{}, err
 	}
 
-	log.Debug().
+	llm.trace(request, response)
+
+	log.Info().
 		Str("id", r.ID).
 		Str("model", r.Model).
 		Int64("tokens", response.Usage.TotalTokens).
+		Str("reasoning", string(llm.reasoningEffort)).
 		Dur("duration", r.Duration).
 		Msg("llm stats")
 
 	return r, nil
+}
+
+func outputReasoning(r *responses.Response) string {
+	var outputText strings.Builder
+	for _, item := range r.Output {
+		for _, content := range item.Content {
+			if content.Type == "reasoning_text" {
+				outputText.WriteString(content.Text)
+			}
+		}
+	}
+	return outputText.String()
 }
 
 func (llm *LLM) prepareRequest(request Request) (responses.ResponseNewParams, error) {
@@ -156,27 +178,11 @@ func (llm *LLM) prepareRequest(request Request) (responses.ResponseNewParams, er
 
 	req := responses.ResponseNewParams{
 		Model: shared.ResponsesModel(llm.model),
-		Text: responses.ResponseTextConfigParam{
-			Format: responses.ResponseFormatTextConfigUnionParam{
-				OfJSONSchema: &responses.ResponseFormatTextJSONSchemaConfigParam{
-					Name: "output",
-					Schema: map[string]any{
-						"type": "object",
-						"properties": map[string]any{
-							"output_markdown": map[string]any{
-								"type":        "string",
-								"description": "The response text in Markdown format.",
-							},
-						},
-						"required":             []string{"output_markdown"},
-						"additionalProperties": false,
-					},
-					Strict: param.Opt[bool]{Value: true},
-				},
-			},
-		},
 		Input: responses.ResponseNewParamsInputUnion{
 			OfInputItemList: itemsList,
+		},
+		Reasoning: shared.ReasoningParam{
+			Effort: llm.reasoningEffort,
 		},
 	}
 
@@ -244,4 +250,29 @@ func (llm *LLM) updateHistory(request Request, itemsList []responses.ResponseInp
 			Text:        response.Text,
 		},
 	)
+}
+
+func (llm *LLM) trace(request responses.ResponseNewParams, response *responses.Response) {
+	if !llm.enableTracing {
+		return
+	}
+
+	var sb strings.Builder
+	sb.WriteString("Request:\n")
+	requestJSON := formatJSON(request)
+	responseJSON := prettifyJSON([]byte(response.RawJSON()))
+
+	_, _ = fmt.Fprintf(os.Stdout, "REQUEST:\n%s\nRESPONSE:\n%s\n\n", requestJSON, responseJSON)
+}
+
+func formatJSON[T json.Marshaler](v T) string {
+	bs, _ := v.MarshalJSON()
+	return prettifyJSON(bs)
+}
+
+func prettifyJSON(bs []byte) string {
+	var t any
+	_ = json.Unmarshal(bs, &t)
+	formatted, _ := json.MarshalIndent(t, "", "  ")
+	return string(formatted)
 }
