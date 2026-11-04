@@ -105,19 +105,19 @@ func withLLMProvider(cmd *cobra.Command) func(history llmprovider.History) (*llm
 }
 
 func withStorage(cmd *cobra.Command) func() (*storage.Storage, error) {
-	var storageFile string
-	cmd.Flags().StringVar(&storageFile, "storage-file", "", "Storage file path (default from $GPTBOT_STORAGE_FILE)")
+	var storageDir string
+	cmd.Flags().StringVar(&storageDir, "storage-dir", "", "Storage dir path (default from $GPTBOT_STORAGE_DIR)")
 
 	return func() (*storage.Storage, error) {
-		if storageFile == "" {
-			storageFile = os.Getenv("GPTBOT_STORAGE_FILE")
+		if storageDir == "" {
+			storageDir = os.Getenv("GPTBOT_STORAGE_DIR")
 		}
 
-		if storageFile == "" {
-			return nil, errors.New("storage file path is required")
+		if storageDir == "" {
+			return nil, errors.New("storage dir path is required")
 		}
 
-		return storage.New(storageFile)
+		return storage.New(storageDir)
 	}
 }
 

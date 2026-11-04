@@ -23,7 +23,7 @@ This bot is non-public, so you'll need to set up your own instance of this bot t
    GPTBOT_LLM_TOKEN=<place your openai token here>
    GPTBOT_LLM_MODEL=z-ai/glm-5.3
    GPTBOT_LLM_PROMPT=./var/PROMPT.md
-   GPTBOT_STORAGE_FILE=./var/data.yaml
+   GPTBOT_STORAGE_DIR=./var/data/
    ```
 
    You'll need to:
@@ -47,10 +47,10 @@ This bot is configured via env variables:
 | `TELEGRAM_BOT_TOKEN`  | Required | Telegram bot API access token                                    |
 | `TELEGRAM_BOT_ACCESS` | Required | List of allowed Telegram usernames (or userIDs), comma separated |
 | `GPTBOT_LLM_URL`      | Required | URL of the LLM service                                           |
-| `GPTBOT_LLM_TOKEN`    | Empty | Access token for the LLM                                         |
+| `GPTBOT_LLM_TOKEN`    | Empty    | Access token for the LLM                                         |
 | `GPTBOT_LLM_MODEL`    | Required | Model to use for the LLM                                         |
 | `GPTBOT_LLM_PROMPT`   | Required | Path to the prompt file                                          |
-| `GPTBOT_STORAGE_FILE` | Required | Path to message history file (YAML)                              |
+| `GPTBOT_STORAGE_DIR`  | Required | Path to message history directory                                |
 
 ## License
 

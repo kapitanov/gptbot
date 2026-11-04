@@ -1,48 +1,39 @@
 package storage
 
 import (
+	"encoding/json"
 	"os"
+	"path/filepath"
 	"sync"
 
 	"github.com/kapitanov/gptbot/internal/llmprovider"
-	"github.com/pkg/errors"
-	"gopkg.in/yaml.v3"
 )
 
 // Storage stores conversation data.
 type Storage struct {
-	filename string
-	mutex    sync.Mutex
+	dir   string
+	mutex sync.Mutex
 }
 
 // New creates new storage.
-func New(filename string) (*Storage, error) {
+func New(dir string) (*Storage, error) {
 	s := &Storage{
-		filename: filename,
+		dir: dir,
 	}
-
-	err := s.do(func(_ *RootYAML, _ func() error) error {
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-
 	return s, nil
 }
 
 // Retrieve fetches the conversation history for the given conversation ID.
 func (s *Storage) Retrieve(conversationID string) ([]llmprovider.Message, error) {
 	var messages []llmprovider.Message
-	err := s.do(func(root *RootYAML, save func() error) error {
-		conversation, exists := root.Conversations[conversationID]
-		if !exists {
+	err := s.do(conversationID, func(conversation *conversationJSON, save func() error) error {
+		if conversation == nil {
 			return nil
 		}
 
 		messages = make([]llmprovider.Message, 0, len(conversation.Messages))
 		for _, m := range conversation.Messages {
-			messages = append(messages, llmprovider.Message{Text: m.Text, Participant: m.Participant})
+			messages = append(messages, m.toLLMMessage())
 		}
 		return nil
 	})
@@ -51,15 +42,9 @@ func (s *Storage) Retrieve(conversationID string) ([]llmprovider.Message, error)
 
 // Append adds messages to the conversation history for the given conversation ID.
 func (s *Storage) Append(conversationID string, messages ...llmprovider.Message) error {
-	return s.do(func(root *RootYAML, save func() error) error {
-		conversation, exists := root.Conversations[conversationID]
-		if !exists {
-			conversation = &ConversationYAML{}
-			root.Conversations[conversationID] = conversation
-		}
-
+	return s.do(conversationID, func(conversation *conversationJSON, save func() error) error {
 		for _, m := range messages {
-			conversation.Messages = append(conversation.Messages, MessageYAML{Text: m.Text, Participant: m.Participant})
+			conversation.Messages = append(conversation.Messages, newMessageJSON(m))
 		}
 
 		return save()
@@ -68,67 +53,56 @@ func (s *Storage) Append(conversationID string, messages ...llmprovider.Message)
 
 // Clear removes the conversation history for the given conversation ID.
 func (s *Storage) Clear(conversationID string) error {
-	return s.do(func(root *RootYAML, save func() error) error {
-		delete(root.Conversations, conversationID)
+	return s.do(conversationID, func(conversation *conversationJSON, save func() error) error {
+		conversation.Messages = nil
 		return save()
 	})
 }
 
-func (s *Storage) do(fn func(root *RootYAML, save func() error) error) error {
-	// A global lock is a terrible idea, but for this pet project it should be OK.00
+func (s *Storage) do(conversationID string, fn func(conversation *conversationJSON, save func() error) error) error {
+	filePath := filepath.Join(s.dir, conversationID+".json")
+
+	// A global lock is a terrible idea, but for this pet project it should be OK.
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
-	root, err := s.load()
+	conversation, err := s.load(filePath)
 	if err != nil {
 		return err
 	}
 
-	return fn(root, func() error {
-		return s.store(root)
+	return fn(conversation, func() error {
+		return s.store(filePath, conversation)
 	})
 }
 
-func (s *Storage) load() (*RootYAML, error) {
-	data, err := os.ReadFile(s.filename)
+func (s *Storage) load(filePath string) (*conversationJSON, error) {
+	data, err := os.ReadFile(filePath)
 	if err != nil {
-		if !errors.Is(err, os.ErrNotExist) {
-			return nil, err
-		}
-
-		f, err := os.Create(s.filename)
-		if err != nil {
-			return nil, err
-		}
-
-		err = f.Close()
-		if err != nil {
-			return nil, err
-		}
-
-		data = []byte("")
+		data = []byte("{}")
 	}
 
-	var root RootYAML
-	err = yaml.Unmarshal(data, &root)
+	var root conversationJSON
+	err = json.Unmarshal(data, &root)
 	if err != nil {
 		return nil, err
-	}
-
-	if root.Conversations == nil {
-		root.Conversations = make(map[string]*ConversationYAML)
 	}
 
 	return &root, nil
 }
 
-func (s *Storage) store(root *RootYAML) error {
-	data, err := yaml.Marshal(root)
+func (s *Storage) store(filePath string, conversation *conversationJSON) error {
+	data, err := json.MarshalIndent(conversation, "", "  ")
 	if err != nil {
 		return err
 	}
 
-	err = os.WriteFile(s.filename, data, 0x777)
+	err = os.MkdirAll(filepath.Dir(filePath), 0o777)
+	if err != nil {
+		return err
+	}
+
+	err = os.WriteFile(filePath, data, 0o777)
 	if err != nil {
 		return err
 	}
@@ -136,18 +110,39 @@ func (s *Storage) store(root *RootYAML) error {
 	return nil
 }
 
-// RootYAML is a YAML model for data root.
-type RootYAML struct {
-	Conversations map[string]*ConversationYAML `yaml:"conversations"` // Conversations.
+// conversationJSON is a JSON model for conversation.
+type conversationJSON struct {
+	Messages []messageJSON `json:"messages"` // Messages in the conversation.
 }
 
-// ConversationYAML is a YAML model for conversation.
-type ConversationYAML struct {
-	Messages []MessageYAML `yaml:"messages"` // Messages in the conversation.
+// messageJSON is a JSON model for a message.
+type messageJSON struct {
+	User      *string `json:"user,omitempty"`
+	Assistant *string `json:"assistant,omitempty"`
 }
 
-// MessageYAML is a YAML model for message.
-type MessageYAML struct {
-	Participant llmprovider.Participant `yaml:"participant"` // Conversation participant.
-	Text        string                  `yaml:"text"`        // Message text.
+func newMessageJSON(msg llmprovider.Message) messageJSON {
+	switch msg.Participant {
+	case llmprovider.ParticipantUser:
+		return messageJSON{User: &msg.Text}
+	case llmprovider.ParticipantAssistant:
+		return messageJSON{Assistant: &msg.Text}
+	}
+	return messageJSON{}
+}
+
+func (m messageJSON) toLLMMessage() llmprovider.Message {
+	if m.User != nil {
+		return llmprovider.Message{
+			Participant: llmprovider.ParticipantUser,
+			Text:        *m.User,
+		}
+	}
+	if m.Assistant != nil {
+		return llmprovider.Message{
+			Participant: llmprovider.ParticipantAssistant,
+			Text:        *m.Assistant,
+		}
+	}
+	return llmprovider.Message{}
 }

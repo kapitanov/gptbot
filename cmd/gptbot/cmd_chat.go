@@ -42,7 +42,7 @@ func chatCommand() *cobra.Command {
 
 		ctx := cmd.Context()
 
-		conversationID := "[local]"
+		conversationID := "local"
 
 		for {
 			line, exit := readUserChatMessage(ctx)
@@ -63,7 +63,7 @@ func chatCommand() *cobra.Command {
 			printUserChatMessage(line)
 
 			var response llmprovider.Response
-			runSpinner(func() {
+			runSpinner(ctx, func() {
 				response, err = g.Generate(ctx, llmprovider.Request{Message: line, ConversationID: conversationID})
 			})
 
@@ -107,8 +107,8 @@ func printUserChatMessage(message string) {
 	_, _ = lipgloss.Println(">", userMessageStyle.Render(message))
 }
 
-func runSpinner(action func()) {
-	_ = spinner.New().Title(faintStyle.Render("Thinking....")).Action(action).Run()
+func runSpinner(ctx context.Context, action func()) {
+	_ = spinner.New().Context(ctx).Title(faintStyle.Render("Thinking....")).Action(action).Run()
 }
 
 func printBotChatMessage(response llmprovider.Response) {
