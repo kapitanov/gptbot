@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kapitanov/gptbot/internal/gpt"
+	"github.com/kapitanov/gptbot/internal/llmprovider"
 	"github.com/kapitanov/gptbot/internal/telegram/texts"
 	"github.com/rs/zerolog/log"
 	"gopkg.in/telebot.v4"
@@ -69,14 +69,10 @@ func (tg *Telegram) generateE(msg *telebot.Message, request string) error {
 		return nil
 	}
 
-	lastResponseID, err := tg.storage.GetLastResponseID(msg.Sender.ID)
-	if err != nil {
-		log.Error().Err(err).Str("username", msg.Sender.Username).Int("msg", msg.ID).Msg("failed to get last response id")
-		return err
-	}
+	conversationID := getConversationID(msg)
 
 	stopThinking := tg.withThinkingMsg(msg)
-	response, err := tg.gpt.Generate(context.Background(), gpt.Request{Message: request, PrevResponseID: lastResponseID})
+	response, err := tg.llm.Generate(context.Background(), llmprovider.Request{Message: request, ConversationID: conversationID})
 	stopThinking()
 
 	if err != nil {
@@ -94,19 +90,14 @@ func (tg *Telegram) generateE(msg *telebot.Message, request string) error {
 		return err
 	}
 
-	err = tg.storage.SetLastResponseID(msg.Sender.ID, response.ID)
-	if err != nil {
-		log.Error().Err(err).Str("username", msg.Sender.Username).Int("msg", msg.ID).Msg("failed to set last response id")
-		return err
-	}
-
 	log.Info().
 		Str("username", msg.Sender.Username).
 		Int("msg", msg.ID).
-		Str("last", lastResponseID).
+		Str("conversation", conversationID).
+		Int64("tokens", response.Usage.TotalTokens).
+		Str("model", response.Model).
 		Str("request", request).
 		Str("response", response.Text).
-		Int64("tokens", response.Usage.TotalTokens).
 		Msg("generated a reply")
 
 	return nil
@@ -128,6 +119,7 @@ func normalizeText(text string) string {
 func (tg *Telegram) withThinkingMsg(msg *telebot.Message) func() {
 	done := make(chan struct{})
 	ctx, cancel := context.WithCancel(context.Background())
+
 	go func() {
 		defer close(done)
 

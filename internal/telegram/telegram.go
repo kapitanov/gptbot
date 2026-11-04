@@ -2,12 +2,13 @@ package telegram
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/rs/zerolog/log"
 	"gopkg.in/telebot.v4"
 
-	"github.com/kapitanov/gptbot/internal/gpt"
+	"github.com/kapitanov/gptbot/internal/llmprovider"
 	"github.com/kapitanov/gptbot/internal/storage"
 	"github.com/kapitanov/gptbot/internal/telegram/texts"
 )
@@ -16,14 +17,14 @@ import (
 type Telegram struct {
 	bot           *telebot.Bot
 	storage       *storage.Storage
-	gpt           *gpt.GPT
+	llm           *llmprovider.LLM
 	accessChecker AccessChecker
 }
 
 // Options is a telegram bot options.
 type Options struct {
 	Token         string           // Telegram bot token.
-	GPT           *gpt.GPT         // GPT text transformer.
+	LLM           *llmprovider.LLM // LLM client.
 	AccessChecker AccessChecker    // Access checker.
 	Storage       *storage.Storage // Storage.
 }
@@ -49,7 +50,7 @@ func New(options Options) (*Telegram, error) {
 	tg := &Telegram{
 		bot:           bot,
 		accessChecker: options.AccessChecker,
-		gpt:           options.GPT,
+		llm:           options.LLM,
 		storage:       options.Storage,
 	}
 
@@ -94,4 +95,8 @@ func (tg *Telegram) hasAccess(msg *telebot.Message) bool {
 		log.Error().Err(err).Str("username", msg.Sender.Username).Int("msg", msg.ID).Msg("failed to send access denied message")
 	}
 	return false
+}
+
+func getConversationID(msg *telebot.Message) string {
+	return fmt.Sprintf("u%d", msg.Chat.ID)
 }

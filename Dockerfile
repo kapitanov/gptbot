@@ -1,7 +1,7 @@
 FROM golang:1.25-alpine AS builder
 WORKDIR /app
 COPY . .
-RUN GOOS=linux GOARCH=amd64 go build -o /out/gptbot && \
+RUN GOOS=linux GOARCH=amd64 go build -o /out/gptbot ./cmd/gptbot && \
     /out/gptbot --version
 
 FROM alpine:latest

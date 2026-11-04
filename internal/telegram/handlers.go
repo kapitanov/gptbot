@@ -10,6 +10,7 @@ import (
 func (tg *Telegram) setupHandlers() {
 	tg.bot.Handle("/start", tg.onStartCommand)
 	tg.bot.Handle("/reset", tg.onResetCommand)
+	tg.bot.Handle("/clear", tg.onResetCommand)
 	tg.bot.Handle(telebot.OnText, tg.onText)
 	tg.bot.Handle(telebot.OnPhoto, tg.onPhoto)
 	tg.bot.Handle(telebot.OnVideo, tg.onVideo)
@@ -42,9 +43,11 @@ func (tg *Telegram) onResetCommand(ctx telebot.Context) error {
 		return nil
 	}
 
-	err := tg.storage.SetLastResponseID(msg.Sender.ID, "")
+	conversationID := getConversationID(msg)
+
+	err := tg.storage.Clear(conversationID)
 	if err != nil {
-		log.Error().Err(err).Str("username", msg.Sender.Username).Int("msg", msg.ID).Msg("failed to reset conversation")
+		log.Error().Err(err).Str("username", msg.Sender.Username).Str("conversation", conversationID).Msg("failed to reset conversation")
 		return err
 	}
 

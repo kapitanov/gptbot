@@ -2,5 +2,6 @@ bin
 .env
 gptbot
 gptbot.exe
+!cmd/gptbot
 var
 .DS_Store

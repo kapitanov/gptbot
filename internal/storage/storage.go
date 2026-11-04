@@ -4,6 +4,7 @@ import (
 	"os"
 	"sync"
 
+	"github.com/kapitanov/gptbot/internal/llmprovider"
 	"github.com/pkg/errors"
 	"gopkg.in/yaml.v3"
 )
@@ -30,29 +31,45 @@ func New(filename string) (*Storage, error) {
 	return s, nil
 }
 
-func (s *Storage) GetLastResponseID(userID int64) (string, error) {
-	var lastResponseID string
+// Retrieve fetches the conversation history for the given conversation ID.
+func (s *Storage) Retrieve(conversationID string) ([]llmprovider.Message, error) {
+	var messages []llmprovider.Message
 	err := s.do(func(root *RootYAML, save func() error) error {
-		conversation, exists := root.Conversations[userID]
+		conversation, exists := root.Conversations[conversationID]
 		if !exists {
 			return nil
 		}
 
-		lastResponseID = conversation.LastResponseID
+		messages = make([]llmprovider.Message, 0, len(conversation.Messages))
+		for _, m := range conversation.Messages {
+			messages = append(messages, llmprovider.Message{Text: m.Text, Participant: m.Participant})
+		}
 		return nil
 	})
-	return lastResponseID, err
+	return messages, err
 }
 
-func (s *Storage) SetLastResponseID(userID int64, responseID string) error {
+// Append adds messages to the conversation history for the given conversation ID.
+func (s *Storage) Append(conversationID string, messages ...llmprovider.Message) error {
 	return s.do(func(root *RootYAML, save func() error) error {
-		conversation, exists := root.Conversations[userID]
+		conversation, exists := root.Conversations[conversationID]
 		if !exists {
 			conversation = &ConversationYAML{}
-			root.Conversations[userID] = conversation
+			root.Conversations[conversationID] = conversation
 		}
 
-		conversation.LastResponseID = responseID
+		for _, m := range messages {
+			conversation.Messages = append(conversation.Messages, MessageYAML{Text: m.Text, Participant: m.Participant})
+		}
+
+		return save()
+	})
+}
+
+// Clear removes the conversation history for the given conversation ID.
+func (s *Storage) Clear(conversationID string) error {
+	return s.do(func(root *RootYAML, save func() error) error {
+		delete(root.Conversations, conversationID)
 		return save()
 	})
 }
@@ -99,7 +116,7 @@ func (s *Storage) load() (*RootYAML, error) {
 	}
 
 	if root.Conversations == nil {
-		root.Conversations = make(map[int64]*ConversationYAML)
+		root.Conversations = make(map[string]*ConversationYAML)
 	}
 
 	return &root, nil
@@ -121,10 +138,16 @@ func (s *Storage) store(root *RootYAML) error {
 
 // RootYAML is a YAML model for data root.
 type RootYAML struct {
-	Conversations map[int64]*ConversationYAML `yaml:"conversations"` // Conversations.
+	Conversations map[string]*ConversationYAML `yaml:"conversations"` // Conversations.
 }
 
 // ConversationYAML is a YAML model for conversation.
 type ConversationYAML struct {
-	LastResponseID string `yaml:"last_response_id"` // ID of the last response sent by the bot.
+	Messages []MessageYAML `yaml:"messages"` // Messages in the conversation.
+}
+
+// MessageYAML is a YAML model for message.
+type MessageYAML struct {
+	Participant llmprovider.Participant `yaml:"participant"` // Conversation participant.
+	Text        string                  `yaml:"text"`        // Message text.
 }

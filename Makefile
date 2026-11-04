@@ -1,7 +1,7 @@
 all: build test vet docker
 
 build:
-	go build -o ./bin/gptbot .
+	go build -o ./bin/gptbot ./cmd/gptbot
 
 test:
 	go test ./...
