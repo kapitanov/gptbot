@@ -110,13 +110,14 @@ type Request struct {
 
 // Response is a GPT response.
 type Response struct {
-	ID          string
-	Text        string                  // Transformed text.
-	Reasoning   string                  // Reasoning output.
-	Usage       responses.ResponseUsage // Token usage.
-	TotalTokens int64                   // Total number of tokens used.
-	Model       string                  // Model name.
-	Duration    time.Duration           // Duration of the response.
+	ID              string
+	Text            string                  // Transformed text.
+	Reasoning       string                  // Reasoning output.
+	Usage           responses.ResponseUsage // Token usage.
+	TotalTokens     int64                   // Total number of tokens used.
+	Model           string                  // Model name.
+	ReasoningEffort shared.ReasoningEffort  // Reasoning effort used.
+	Duration        time.Duration           // Duration of the response.
 }
 
 // Generate generates a new message from the input stream.
@@ -132,13 +133,14 @@ func (llm *LLM) Generate(ctx context.Context, req Request) (Response, error) {
 	}
 
 	r := Response{
-		ID:          response.ID,
-		Text:        response.OutputText(),
-		Reasoning:   outputReasoning(response),
-		Usage:       response.Usage,
-		Model:       response.Model,
-		TotalTokens: response.Usage.TotalTokens,
-		Duration:    time.Second * time.Duration(response.CompletedAt-response.CreatedAt),
+		ID:              response.ID,
+		Text:            response.OutputText(),
+		Reasoning:       outputReasoning(response),
+		Usage:           response.Usage,
+		Model:           response.Model,
+		TotalTokens:     response.Usage.TotalTokens,
+		ReasoningEffort: llm.reasoningEffort,
+		Duration:        time.Second * time.Duration(response.CompletedAt-response.CreatedAt),
 	}
 
 	if err = llm.updateHistory(req, request.Input.OfInputItemList, r); err != nil {

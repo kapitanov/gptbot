@@ -85,8 +85,10 @@ func (tg *Telegram) generateE(msg *telebot.Message, request string) error {
 	}
 
 	markdown = fmt.Sprintf(
-		"%s\n\n<sub>%s tokens, generated in %.2fs, %.1f tokens/sec</sub>",
+		"%s\n\n<sub>model %s, reasoning %s, %s tokens, generated in %.2fs, %.1f tokens/sec</sub>",
 		markdown,
+		response.Model,
+		string(response.ReasoningEffort),
 		prettyTokens(response.Usage.TotalTokens),
 		response.Duration.Seconds(),
 		float64(response.Usage.TotalTokens)/response.Duration.Seconds(),
