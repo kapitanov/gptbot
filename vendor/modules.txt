@@ -98,8 +98,6 @@ github.com/coder/websocket/internal/bpool
 github.com/coder/websocket/internal/errd
 github.com/coder/websocket/internal/util
 github.com/coder/websocket/internal/wsjs
-# github.com/dlclark/regexp2 v1.12.0
-## explicit; go 1.13
 # github.com/dlclark/regexp2/v2 v2.12.0
 ## explicit; go 1.25
 github.com/dlclark/regexp2/v2
