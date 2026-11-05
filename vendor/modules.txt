@@ -4,12 +4,12 @@ charm.land/glamour/v2
 charm.land/glamour/v2/ansi
 charm.land/glamour/v2/internal/autolink
 charm.land/glamour/v2/styles
-# charm.land/lipgloss/v2 v2.0.4
+# charm.land/lipgloss/v2 v2.0.6
 ## explicit; go 1.25.0
 charm.land/lipgloss/v2
 charm.land/lipgloss/v2/table
-# github.com/alecthomas/chroma/v2 v2.14.0
-## explicit; go 1.19
+# github.com/alecthomas/chroma/v2 v2.27.0
+## explicit; go 1.25
 github.com/alecthomas/chroma/v2
 github.com/alecthomas/chroma/v2/formatters
 github.com/alecthomas/chroma/v2/formatters/html
@@ -59,10 +59,10 @@ github.com/charmbracelet/huh/spinner
 # github.com/charmbracelet/lipgloss v1.1.0
 ## explicit; go 1.18
 github.com/charmbracelet/lipgloss
-# github.com/charmbracelet/ultraviolet v0.0.0-20251205161215-1948445e3318
-## explicit; go 1.24.2
+# github.com/charmbracelet/ultraviolet v0.0.0-20261023060817-a45b7c86333f
+## explicit; go 1.26.0
 github.com/charmbracelet/ultraviolet
-# github.com/charmbracelet/x/ansi v0.11.7
+# github.com/charmbracelet/x/ansi v0.11.9
 ## explicit; go 1.24.2
 github.com/charmbracelet/x/ansi
 github.com/charmbracelet/x/ansi/kitty
@@ -70,11 +70,11 @@ github.com/charmbracelet/x/ansi/parser
 # github.com/charmbracelet/x/cellbuf v0.0.15
 ## explicit; go 1.24.2
 github.com/charmbracelet/x/cellbuf
-# github.com/charmbracelet/x/exp/slice v0.0.0-20250327172914-2fdc97757edf
-## explicit; go 1.19
+# github.com/charmbracelet/x/exp/slice v0.1.0
+## explicit; go 1.24.0
 github.com/charmbracelet/x/exp/slice
-# github.com/charmbracelet/x/exp/strings v0.0.0-20240722160745-212f7b056ed0
-## explicit; go 1.19
+# github.com/charmbracelet/x/exp/strings v0.1.0
+## explicit; go 1.24.0
 github.com/charmbracelet/x/exp/strings
 # github.com/charmbracelet/x/term v0.2.2
 ## explicit; go 1.24.0
@@ -91,12 +91,22 @@ github.com/clipperhouse/displaywidth
 # github.com/clipperhouse/uax29/v2 v2.7.0
 ## explicit; go 1.18
 github.com/clipperhouse/uax29/v2/graphemes
-# github.com/dlclark/regexp2 v1.11.0
+# github.com/coder/websocket v1.8.15
+## explicit; go 1.23
+github.com/coder/websocket
+github.com/coder/websocket/internal/bpool
+github.com/coder/websocket/internal/errd
+github.com/coder/websocket/internal/util
+github.com/coder/websocket/internal/wsjs
+# github.com/dlclark/regexp2 v1.12.0
 ## explicit; go 1.13
-github.com/dlclark/regexp2
-github.com/dlclark/regexp2/syntax
-# github.com/dustin/go-humanize v1.0.1
-## explicit; go 1.16
+# github.com/dlclark/regexp2/v2 v2.12.0
+## explicit; go 1.25
+github.com/dlclark/regexp2/v2
+github.com/dlclark/regexp2/v2/helpers
+github.com/dlclark/regexp2/v2/syntax
+# github.com/dustin/go-humanize v1.1.0
+## explicit; go 1.21
 github.com/dustin/go-humanize
 # github.com/erikgeiser/coninput v0.0.0-20211004153227-1c3628e74d0f
 ## explicit; go 1.16
@@ -111,20 +121,20 @@ github.com/inconshreveable/mousetrap
 ## explicit; go 1.12
 github.com/joho/godotenv
 github.com/joho/godotenv/autoload
-# github.com/lucasb-eyer/go-colorful v1.4.0
+# github.com/lucasb-eyer/go-colorful v1.4.1
 ## explicit; go 1.12
 github.com/lucasb-eyer/go-colorful
-# github.com/mattn/go-colorable v0.1.14
+# github.com/mattn/go-colorable v0.1.16
 ## explicit; go 1.18
 github.com/mattn/go-colorable
-# github.com/mattn/go-isatty v0.0.20
-## explicit; go 1.15
+# github.com/mattn/go-isatty v0.0.24
+## explicit; go 1.20
 github.com/mattn/go-isatty
 # github.com/mattn/go-localereader v0.0.1
 ## explicit
 github.com/mattn/go-localereader
-# github.com/mattn/go-runewidth v0.0.23
-## explicit; go 1.20
+# github.com/mattn/go-runewidth v0.0.31
+## explicit; go 1.23
 github.com/mattn/go-runewidth
 # github.com/microcosm-cc/bluemonday v1.0.27
 ## explicit; go 1.19
@@ -143,9 +153,10 @@ github.com/muesli/cancelreader
 # github.com/muesli/termenv v0.16.0
 ## explicit; go 1.17
 github.com/muesli/termenv
-# github.com/openai/openai-go/v3 v3.29.0
-## explicit; go 1.22
+# github.com/openai/openai-go/v3 v3.94.0
+## explicit; go 1.26.0
 github.com/openai/openai-go/v3
+github.com/openai/openai-go/v3/auth
 github.com/openai/openai-go/v3/conversations
 github.com/openai/openai-go/v3/internal
 github.com/openai/openai-go/v3/internal/apierror
@@ -157,11 +168,14 @@ github.com/openai/openai-go/v3/internal/encoding/json/sentinel
 github.com/openai/openai-go/v3/internal/encoding/json/shims
 github.com/openai/openai-go/v3/internal/paramutil
 github.com/openai/openai-go/v3/internal/requestconfig
+github.com/openai/openai-go/v3/internal/websockettransport
+github.com/openai/openai-go/v3/live
 github.com/openai/openai-go/v3/option
 github.com/openai/openai-go/v3/packages/pagination
 github.com/openai/openai-go/v3/packages/param
 github.com/openai/openai-go/v3/packages/respjson
 github.com/openai/openai-go/v3/packages/ssestream
+github.com/openai/openai-go/v3/packages/websocket
 github.com/openai/openai-go/v3/realtime
 github.com/openai/openai-go/v3/responses
 github.com/openai/openai-go/v3/shared
@@ -170,8 +184,8 @@ github.com/openai/openai-go/v3/webhooks
 # github.com/rivo/uniseg v0.4.7
 ## explicit; go 1.18
 github.com/rivo/uniseg
-# github.com/rs/zerolog v1.34.0
-## explicit; go 1.15
+# github.com/rs/zerolog v1.35.1
+## explicit; go 1.23
 github.com/rs/zerolog
 github.com/rs/zerolog/internal/cbor
 github.com/rs/zerolog/internal/json
@@ -184,23 +198,23 @@ github.com/spf13/cobra
 github.com/spf13/pflag
 # github.com/stretchr/testify v1.11.1
 ## explicit; go 1.17
-# github.com/tidwall/gjson v1.18.0
-## explicit; go 1.12
+# github.com/tidwall/gjson v1.20.0
+## explicit; go 1.23
 github.com/tidwall/gjson
-# github.com/tidwall/match v1.1.1
+# github.com/tidwall/match v1.2.0
 ## explicit; go 1.15
 github.com/tidwall/match
-# github.com/tidwall/pretty v1.2.1
+# github.com/tidwall/pretty v1.2.2
 ## explicit; go 1.16
 github.com/tidwall/pretty
 # github.com/tidwall/sjson v1.2.5
 ## explicit; go 1.14
 github.com/tidwall/sjson
-# github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e
-## explicit; go 1.19
+# github.com/xo/terminfo v1.3.1
+## explicit; go 1.25
 github.com/xo/terminfo
-# github.com/yuin/goldmark v1.7.8
-## explicit; go 1.19
+# github.com/yuin/goldmark v1.8.7
+## explicit; go 1.22
 github.com/yuin/goldmark
 github.com/yuin/goldmark/ast
 github.com/yuin/goldmark/extension
@@ -210,24 +224,24 @@ github.com/yuin/goldmark/renderer
 github.com/yuin/goldmark/renderer/html
 github.com/yuin/goldmark/text
 github.com/yuin/goldmark/util
-# github.com/yuin/goldmark-emoji v1.0.5
-## explicit; go 1.15
+# github.com/yuin/goldmark-emoji v1.0.6
+## explicit; go 1.22
 github.com/yuin/goldmark-emoji
 github.com/yuin/goldmark-emoji/ast
 github.com/yuin/goldmark-emoji/definition
-# golang.org/x/net v0.39.0
-## explicit; go 1.23.0
+# golang.org/x/net v0.62.0
+## explicit; go 1.26.0
 golang.org/x/net/html
 golang.org/x/net/html/atom
-# golang.org/x/sync v0.20.0
-## explicit; go 1.25.0
+# golang.org/x/sync v0.24.0
+## explicit; go 1.26.0
 golang.org/x/sync/errgroup
-# golang.org/x/sys v0.45.0
-## explicit; go 1.25.0
+# golang.org/x/sys v0.49.0
+## explicit; go 1.26.0
 golang.org/x/sys/unix
 golang.org/x/sys/windows
-# golang.org/x/text v0.24.0
-## explicit; go 1.23.0
+# golang.org/x/text v0.43.0
+## explicit; go 1.26.0
 golang.org/x/text/cases
 golang.org/x/text/internal
 golang.org/x/text/internal/language

@@ -1,11 +1,10 @@
-// File generated from our OpenAPI spec by Stainless. See CONTRIBUTING.md for details.
+// File generated from our OpenAPI spec by Castiron. See CONTRIBUTING.md for details.
 
 package openai
 
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net/http"
 	"net/url"
 	"slices"
@@ -43,9 +42,11 @@ type BetaThreadRunService struct {
 // NewBetaThreadRunService generates a new service that applies the given options
 // to each request. These options are applied after the parent client's options (if
 // there is one), and before any request-specific options.
+//
+// Deprecated: The Assistants API is deprecated in favor of the Responses API
 func NewBetaThreadRunService(opts ...option.RequestOption) (r BetaThreadRunService) {
 	r = BetaThreadRunService{}
-	r.Options = opts
+	r.Options = requestconfig.InheritedOptions(opts...)
 	r.Steps = NewBetaThreadRunStepService(opts...)
 	return
 }
@@ -54,13 +55,14 @@ func NewBetaThreadRunService(opts ...option.RequestOption) (r BetaThreadRunServi
 //
 // Deprecated: The Assistants API is deprecated in favor of the Responses API
 func (r *BetaThreadRunService) New(ctx context.Context, threadID string, params BetaThreadRunNewParams, opts ...option.RequestOption) (res *Run, err error) {
-	opts = slices.Concat(r.Options, opts)
+	var preClientOpts = []option.RequestOption{requestconfig.WithBearerAuthSecurity()}
+	opts = slices.Concat(preClientOpts, r.Options, opts)
 	opts = append([]option.RequestOption{option.WithHeader("OpenAI-Beta", "assistants=v2")}, opts...)
 	if threadID == "" {
 		err = errors.New("missing required thread_id parameter")
 		return nil, err
 	}
-	path := fmt.Sprintf("threads/%s/runs", threadID)
+	path := requestconfig.FormatPath("threads/%s/runs", threadID)
 	err = requestconfig.ExecuteNewRequest(ctx, http.MethodPost, path, params, &res, opts...)
 	return res, err
 }
@@ -73,14 +75,15 @@ func (r *BetaThreadRunService) NewStreaming(ctx context.Context, threadID string
 		raw *http.Response
 		err error
 	)
-	opts = slices.Concat(r.Options, opts)
+	var preClientOpts = []option.RequestOption{requestconfig.WithBearerAuthSecurity()}
+	opts = slices.Concat(preClientOpts, r.Options, opts)
 	opts = append([]option.RequestOption{option.WithHeader("OpenAI-Beta", "assistants=v2")}, opts...)
 	opts = append(opts, option.WithJSONSet("stream", true))
 	if threadID == "" {
 		err = errors.New("missing required thread_id parameter")
 		return ssestream.NewStream[AssistantStreamEventUnion](nil, err)
 	}
-	path := fmt.Sprintf("threads/%s/runs", threadID)
+	path := requestconfig.FormatPath("threads/%s/runs", threadID)
 	err = requestconfig.ExecuteNewRequest(ctx, http.MethodPost, path, params, &raw, opts...)
 	return ssestream.NewStreamWithSynthesizeEventData[AssistantStreamEventUnion](ssestream.NewDecoder(raw), err)
 }
@@ -89,7 +92,8 @@ func (r *BetaThreadRunService) NewStreaming(ctx context.Context, threadID string
 //
 // Deprecated: The Assistants API is deprecated in favor of the Responses API
 func (r *BetaThreadRunService) Get(ctx context.Context, threadID string, runID string, opts ...option.RequestOption) (res *Run, err error) {
-	opts = slices.Concat(r.Options, opts)
+	var preClientOpts = []option.RequestOption{requestconfig.WithBearerAuthSecurity()}
+	opts = slices.Concat(preClientOpts, r.Options, opts)
 	opts = append([]option.RequestOption{option.WithHeader("OpenAI-Beta", "assistants=v2")}, opts...)
 	if threadID == "" {
 		err = errors.New("missing required thread_id parameter")
@@ -99,7 +103,7 @@ func (r *BetaThreadRunService) Get(ctx context.Context, threadID string, runID s
 		err = errors.New("missing required run_id parameter")
 		return nil, err
 	}
-	path := fmt.Sprintf("threads/%s/runs/%s", threadID, runID)
+	path := requestconfig.FormatPath("threads/%s/runs/%s", threadID, runID)
 	err = requestconfig.ExecuteNewRequest(ctx, http.MethodGet, path, nil, &res, opts...)
 	return res, err
 }
@@ -108,7 +112,8 @@ func (r *BetaThreadRunService) Get(ctx context.Context, threadID string, runID s
 //
 // Deprecated: The Assistants API is deprecated in favor of the Responses API
 func (r *BetaThreadRunService) Update(ctx context.Context, threadID string, runID string, body BetaThreadRunUpdateParams, opts ...option.RequestOption) (res *Run, err error) {
-	opts = slices.Concat(r.Options, opts)
+	var preClientOpts = []option.RequestOption{requestconfig.WithBearerAuthSecurity()}
+	opts = slices.Concat(preClientOpts, r.Options, opts)
 	opts = append([]option.RequestOption{option.WithHeader("OpenAI-Beta", "assistants=v2")}, opts...)
 	if threadID == "" {
 		err = errors.New("missing required thread_id parameter")
@@ -118,7 +123,7 @@ func (r *BetaThreadRunService) Update(ctx context.Context, threadID string, runI
 		err = errors.New("missing required run_id parameter")
 		return nil, err
 	}
-	path := fmt.Sprintf("threads/%s/runs/%s", threadID, runID)
+	path := requestconfig.FormatPath("threads/%s/runs/%s", threadID, runID)
 	err = requestconfig.ExecuteNewRequest(ctx, http.MethodPost, path, body, &res, opts...)
 	return res, err
 }
@@ -128,13 +133,14 @@ func (r *BetaThreadRunService) Update(ctx context.Context, threadID string, runI
 // Deprecated: The Assistants API is deprecated in favor of the Responses API
 func (r *BetaThreadRunService) List(ctx context.Context, threadID string, query BetaThreadRunListParams, opts ...option.RequestOption) (res *pagination.CursorPage[Run], err error) {
 	var raw *http.Response
-	opts = slices.Concat(r.Options, opts)
+	var preClientOpts = []option.RequestOption{requestconfig.WithBearerAuthSecurity()}
+	opts = slices.Concat(preClientOpts, r.Options, opts)
 	opts = append([]option.RequestOption{option.WithHeader("OpenAI-Beta", "assistants=v2"), option.WithResponseInto(&raw)}, opts...)
 	if threadID == "" {
 		err = errors.New("missing required thread_id parameter")
 		return nil, err
 	}
-	path := fmt.Sprintf("threads/%s/runs", threadID)
+	path := requestconfig.FormatPath("threads/%s/runs", threadID)
 	cfg, err := requestconfig.NewRequestConfig(ctx, http.MethodGet, path, query, &res, opts...)
 	if err != nil {
 		return nil, err
@@ -158,7 +164,8 @@ func (r *BetaThreadRunService) ListAutoPaging(ctx context.Context, threadID stri
 //
 // Deprecated: The Assistants API is deprecated in favor of the Responses API
 func (r *BetaThreadRunService) Cancel(ctx context.Context, threadID string, runID string, opts ...option.RequestOption) (res *Run, err error) {
-	opts = slices.Concat(r.Options, opts)
+	var preClientOpts = []option.RequestOption{requestconfig.WithBearerAuthSecurity()}
+	opts = slices.Concat(preClientOpts, r.Options, opts)
 	opts = append([]option.RequestOption{option.WithHeader("OpenAI-Beta", "assistants=v2")}, opts...)
 	if threadID == "" {
 		err = errors.New("missing required thread_id parameter")
@@ -168,7 +175,7 @@ func (r *BetaThreadRunService) Cancel(ctx context.Context, threadID string, runI
 		err = errors.New("missing required run_id parameter")
 		return nil, err
 	}
-	path := fmt.Sprintf("threads/%s/runs/%s/cancel", threadID, runID)
+	path := requestconfig.FormatPath("threads/%s/runs/%s/cancel", threadID, runID)
 	err = requestconfig.ExecuteNewRequest(ctx, http.MethodPost, path, nil, &res, opts...)
 	return res, err
 }
@@ -180,7 +187,8 @@ func (r *BetaThreadRunService) Cancel(ctx context.Context, threadID string, runI
 //
 // Deprecated: The Assistants API is deprecated in favor of the Responses API
 func (r *BetaThreadRunService) SubmitToolOutputs(ctx context.Context, threadID string, runID string, body BetaThreadRunSubmitToolOutputsParams, opts ...option.RequestOption) (res *Run, err error) {
-	opts = slices.Concat(r.Options, opts)
+	var preClientOpts = []option.RequestOption{requestconfig.WithBearerAuthSecurity()}
+	opts = slices.Concat(preClientOpts, r.Options, opts)
 	opts = append([]option.RequestOption{option.WithHeader("OpenAI-Beta", "assistants=v2")}, opts...)
 	if threadID == "" {
 		err = errors.New("missing required thread_id parameter")
@@ -190,7 +198,7 @@ func (r *BetaThreadRunService) SubmitToolOutputs(ctx context.Context, threadID s
 		err = errors.New("missing required run_id parameter")
 		return nil, err
 	}
-	path := fmt.Sprintf("threads/%s/runs/%s/submit_tool_outputs", threadID, runID)
+	path := requestconfig.FormatPath("threads/%s/runs/%s/submit_tool_outputs", threadID, runID)
 	err = requestconfig.ExecuteNewRequest(ctx, http.MethodPost, path, body, &res, opts...)
 	return res, err
 }
@@ -206,7 +214,8 @@ func (r *BetaThreadRunService) SubmitToolOutputsStreaming(ctx context.Context, t
 		raw *http.Response
 		err error
 	)
-	opts = slices.Concat(r.Options, opts)
+	var preClientOpts = []option.RequestOption{requestconfig.WithBearerAuthSecurity()}
+	opts = slices.Concat(preClientOpts, r.Options, opts)
 	opts = append([]option.RequestOption{option.WithHeader("OpenAI-Beta", "assistants=v2")}, opts...)
 	opts = append(opts, option.WithJSONSet("stream", true))
 	if threadID == "" {
@@ -217,7 +226,7 @@ func (r *BetaThreadRunService) SubmitToolOutputsStreaming(ctx context.Context, t
 		err = errors.New("missing required run_id parameter")
 		return ssestream.NewStream[AssistantStreamEventUnion](nil, err)
 	}
-	path := fmt.Sprintf("threads/%s/runs/%s/submit_tool_outputs", threadID, runID)
+	path := requestconfig.FormatPath("threads/%s/runs/%s/submit_tool_outputs", threadID, runID)
 	err = requestconfig.ExecuteNewRequest(ctx, http.MethodPost, path, body, &raw, opts...)
 	return ssestream.NewStreamWithSynthesizeEventData[AssistantStreamEventUnion](ssestream.NewDecoder(raw), err)
 }
@@ -226,14 +235,14 @@ func (r *BetaThreadRunService) SubmitToolOutputsStreaming(ctx context.Context, t
 type RequiredActionFunctionToolCall struct {
 	// The ID of the tool call. This ID must be referenced when you submit the tool
 	// outputs in using the
-	// [Submit tool outputs to run](https://platform.openai.com/docs/api-reference/runs/submitToolOutputs)
+	// [Submit tool outputs to run](https://developers.openai.com/api/docs/assistants/migration)
 	// endpoint.
 	ID string `json:"id" api:"required"`
 	// The function definition.
 	Function RequiredActionFunctionToolCallFunction `json:"function" api:"required"`
 	// The type of tool call the output is required for. For now, this is always
 	// `function`.
-	Type constant.Function `json:"type" api:"required"`
+	Type constant.Function `json:"type" default:"function"`
 	// JSON contains metadata for fields, check presence with [respjson.Field.Valid].
 	JSON struct {
 		ID          respjson.Field
@@ -272,30 +281,30 @@ func (r *RequiredActionFunctionToolCallFunction) UnmarshalJSON(data []byte) erro
 }
 
 // Represents an execution run on a
-// [thread](https://platform.openai.com/docs/api-reference/threads).
+// [thread](https://developers.openai.com/api/docs/assistants/migration).
 type Run struct {
 	// The identifier, which can be referenced in API endpoints.
 	ID string `json:"id" api:"required"`
 	// The ID of the
-	// [assistant](https://platform.openai.com/docs/api-reference/assistants) used for
-	// execution of this run.
+	// [assistant](https://developers.openai.com/api/docs/assistants/migration) used
+	// for execution of this run.
 	AssistantID string `json:"assistant_id" api:"required"`
 	// The Unix timestamp (in seconds) for when the run was cancelled.
-	CancelledAt int64 `json:"cancelled_at" api:"required"`
+	CancelledAt int64 `json:"cancelled_at" api:"required" format:"unixtime"`
 	// The Unix timestamp (in seconds) for when the run was completed.
-	CompletedAt int64 `json:"completed_at" api:"required"`
+	CompletedAt int64 `json:"completed_at" api:"required" format:"unixtime"`
 	// The Unix timestamp (in seconds) for when the run was created.
-	CreatedAt int64 `json:"created_at" api:"required"`
+	CreatedAt int64 `json:"created_at" api:"required" format:"unixtime"`
 	// The Unix timestamp (in seconds) for when the run will expire.
-	ExpiresAt int64 `json:"expires_at" api:"required"`
+	ExpiresAt int64 `json:"expires_at" api:"required" format:"unixtime"`
 	// The Unix timestamp (in seconds) for when the run failed.
-	FailedAt int64 `json:"failed_at" api:"required"`
+	FailedAt int64 `json:"failed_at" api:"required" format:"unixtime"`
 	// Details on why the run is incomplete. Will be `null` if the run is not
 	// incomplete.
 	IncompleteDetails RunIncompleteDetails `json:"incomplete_details" api:"required"`
 	// The instructions that the
-	// [assistant](https://platform.openai.com/docs/api-reference/assistants) used for
-	// this run.
+	// [assistant](https://developers.openai.com/api/docs/assistants/migration) used
+	// for this run.
 	Instructions string `json:"instructions" api:"required"`
 	// The last error associated with this run. Will be `null` if there are no errors.
 	LastError RunLastError `json:"last_error" api:"required"`
@@ -313,27 +322,27 @@ type Run struct {
 	// a maximum length of 512 characters.
 	Metadata shared.Metadata `json:"metadata" api:"required"`
 	// The model that the
-	// [assistant](https://platform.openai.com/docs/api-reference/assistants) used for
-	// this run.
+	// [assistant](https://developers.openai.com/api/docs/assistants/migration) used
+	// for this run.
 	Model string `json:"model" api:"required"`
 	// The object type, which is always `thread.run`.
-	Object constant.ThreadRun `json:"object" api:"required"`
+	Object constant.ThreadRun `json:"object" default:"thread.run"`
 	// Whether to enable
-	// [parallel function calling](https://platform.openai.com/docs/guides/function-calling#configuring-parallel-function-calling)
+	// [parallel function calling](https://developers.openai.com/api/docs/guides/function-calling#parallel-function-calling)
 	// during tool use.
 	ParallelToolCalls bool `json:"parallel_tool_calls" api:"required"`
 	// Details on the action required to continue the run. Will be `null` if no action
 	// is required.
 	RequiredAction RunRequiredAction `json:"required_action" api:"required"`
 	// Specifies the format that the model must output. Compatible with
-	// [GPT-4o](https://platform.openai.com/docs/models#gpt-4o),
-	// [GPT-4 Turbo](https://platform.openai.com/docs/models#gpt-4-turbo-and-gpt-4),
-	// and all GPT-3.5 Turbo models since `gpt-3.5-turbo-1106`.
+	// [GPT-4o](https://developers.openai.com/api/docs/models/gpt-4o),
+	// [GPT-4 Turbo](https://developers.openai.com/api/docs/models/gpt-4-turbo), and
+	// all GPT-3.5 Turbo models since `gpt-3.5-turbo-1106`.
 	//
 	// Setting to `{ "type": "json_schema", "json_schema": {...} }` enables Structured
 	// Outputs which ensures the model will match your supplied JSON schema. Learn more
 	// in the
-	// [Structured Outputs guide](https://platform.openai.com/docs/guides/structured-outputs).
+	// [Structured Outputs guide](https://developers.openai.com/api/docs/guides/structured-outputs).
 	//
 	// Setting to `{ "type": "json_object" }` enables JSON mode, which ensures the
 	// message the model generates is valid JSON.
@@ -347,7 +356,7 @@ type Run struct {
 	// max context length.
 	ResponseFormat AssistantResponseFormatOptionUnion `json:"response_format" api:"required"`
 	// The Unix timestamp (in seconds) for when the run was started.
-	StartedAt int64 `json:"started_at" api:"required"`
+	StartedAt int64 `json:"started_at" api:"required" format:"unixtime"`
 	// The status of the run, which can be either `queued`, `in_progress`,
 	// `requires_action`, `cancelling`, `cancelled`, `failed`, `completed`,
 	// `incomplete`, or `expired`.
@@ -355,8 +364,9 @@ type Run struct {
 	// Any of "queued", "in_progress", "requires_action", "cancelling", "cancelled",
 	// "failed", "completed", "incomplete", "expired".
 	Status RunStatus `json:"status" api:"required"`
-	// The ID of the [thread](https://platform.openai.com/docs/api-reference/threads)
-	// that was executed on as a part of this run.
+	// The ID of the
+	// [thread](https://developers.openai.com/api/docs/assistants/migration) that was
+	// executed on as a part of this run.
 	ThreadID string `json:"thread_id" api:"required"`
 	// Controls which (if any) tool is called by the model. `none` means the model will
 	// not call any tools and instead generates a message. `auto` is the default value
@@ -367,8 +377,8 @@ type Run struct {
 	// call that tool.
 	ToolChoice AssistantToolChoiceOptionUnion `json:"tool_choice" api:"required"`
 	// The list of tools that the
-	// [assistant](https://platform.openai.com/docs/api-reference/assistants) used for
-	// this run.
+	// [assistant](https://developers.openai.com/api/docs/assistants/migration) used
+	// for this run.
 	Tools []AssistantToolUnion `json:"tools" api:"required"`
 	// Controls for how a thread will be truncated prior to the run. Use this to
 	// control the initial context window of the run.
@@ -471,7 +481,7 @@ type RunRequiredAction struct {
 	// Details on the tool outputs needed for this run to continue.
 	SubmitToolOutputs RunRequiredActionSubmitToolOutputs `json:"submit_tool_outputs" api:"required"`
 	// For now, this is always `submit_tool_outputs`.
-	Type constant.SubmitToolOutputs `json:"type" api:"required"`
+	Type constant.SubmitToolOutputs `json:"type" default:"submit_tool_outputs"`
 	// JSON contains metadata for fields, check presence with [respjson.Field.Valid].
 	JSON struct {
 		SubmitToolOutputs respjson.Field
@@ -577,16 +587,16 @@ const (
 
 type BetaThreadRunNewParams struct {
 	// The ID of the
-	// [assistant](https://platform.openai.com/docs/api-reference/assistants) to use to
-	// execute this run.
+	// [assistant](https://developers.openai.com/api/docs/assistants/migration) to use
+	// to execute this run.
 	AssistantID string `json:"assistant_id" api:"required"`
 	// Appends additional instructions at the end of the instructions for the run. This
 	// is useful for modifying the behavior on a per-run basis without overriding other
 	// instructions.
 	AdditionalInstructions param.Opt[string] `json:"additional_instructions,omitzero"`
 	// Overrides the
-	// [instructions](https://platform.openai.com/docs/api-reference/assistants/createAssistant)
-	// of the assistant. This is useful for modifying the behavior on a per-run basis.
+	// [instructions](https://developers.openai.com/api/docs/assistants/migration) of
+	// the assistant. This is useful for modifying the behavior on a per-run basis.
 	Instructions param.Opt[string] `json:"instructions,omitzero"`
 	// The maximum number of completion tokens that may be used over the course of the
 	// run. The run will make a best effort to use only the number of completion tokens
@@ -611,7 +621,7 @@ type BetaThreadRunNewParams struct {
 	// We generally recommend altering this or temperature but not both.
 	TopP param.Opt[float64] `json:"top_p,omitzero"`
 	// Whether to enable
-	// [parallel function calling](https://platform.openai.com/docs/guides/function-calling#configuring-parallel-function-calling)
+	// [parallel function calling](https://developers.openai.com/api/docs/guides/function-calling#parallel-function-calling)
 	// during tool use.
 	ParallelToolCalls param.Opt[bool] `json:"parallel_tool_calls,omitzero"`
 	// Adds additional messages to the thread before creating the run.
@@ -623,26 +633,20 @@ type BetaThreadRunNewParams struct {
 	// Keys are strings with a maximum length of 64 characters. Values are strings with
 	// a maximum length of 512 characters.
 	Metadata shared.Metadata `json:"metadata,omitzero"`
-	// The ID of the [Model](https://platform.openai.com/docs/api-reference/models) to
-	// be used to execute this run. If a value is provided here, it will override the
-	// model associated with the assistant. If not, the model associated with the
-	// assistant will be used.
+	// The ID of the
+	// [Model](https://developers.openai.com/api/reference/resources/models) to be used
+	// to execute this run. If a value is provided here, it will override the model
+	// associated with the assistant. If not, the model associated with the assistant
+	// will be used.
 	Model shared.ChatModel `json:"model,omitzero"`
-	// Constrains effort on reasoning for
-	// [reasoning models](https://platform.openai.com/docs/guides/reasoning). Currently
-	// supported values are `none`, `minimal`, `low`, `medium`, `high`, and `xhigh`.
-	// Reducing reasoning effort can result in faster responses and fewer tokens used
-	// on reasoning in a response.
+	// Constrains effort on reasoning for reasoning models. Currently supported values
+	// are `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, and `max`. Reducing
+	// reasoning effort can result in faster responses and fewer tokens used on
+	// reasoning in a response. Not all reasoning models support every value. See the
+	// [reasoning guide](https://developers.openai.com/api/docs/guides/reasoning) for
+	// model-specific support.
 	//
-	//   - `gpt-5.1` defaults to `none`, which does not perform reasoning. The supported
-	//     reasoning values for `gpt-5.1` are `none`, `low`, `medium`, and `high`. Tool
-	//     calls are supported for all reasoning values in gpt-5.1.
-	//   - All models before `gpt-5.1` default to `medium` reasoning effort, and do not
-	//     support `none`.
-	//   - The `gpt-5-pro` model defaults to (and only supports) `high` reasoning effort.
-	//   - `xhigh` is supported for all models after `gpt-5.1-codex-max`.
-	//
-	// Any of "none", "minimal", "low", "medium", "high", "xhigh".
+	// Any of "none", "minimal", "low", "medium", "high", "xhigh", "max".
 	ReasoningEffort shared.ReasoningEffort `json:"reasoning_effort,omitzero"`
 	// Override the tools the assistant can use for this run. This is useful for
 	// modifying the behavior on a per-run basis.
@@ -655,18 +659,18 @@ type BetaThreadRunNewParams struct {
 	// to fetch the file search result content.
 	//
 	// See the
-	// [file search tool documentation](https://platform.openai.com/docs/assistants/tools/file-search#customizing-file-search-settings)
+	// [file search tool documentation](https://developers.openai.com/api/docs/guides/tools-file-search#retrieval-customization)
 	// for more information.
 	Include []RunStepInclude `query:"include,omitzero" json:"-"`
 	// Specifies the format that the model must output. Compatible with
-	// [GPT-4o](https://platform.openai.com/docs/models#gpt-4o),
-	// [GPT-4 Turbo](https://platform.openai.com/docs/models#gpt-4-turbo-and-gpt-4),
-	// and all GPT-3.5 Turbo models since `gpt-3.5-turbo-1106`.
+	// [GPT-4o](https://developers.openai.com/api/docs/models/gpt-4o),
+	// [GPT-4 Turbo](https://developers.openai.com/api/docs/models/gpt-4-turbo), and
+	// all GPT-3.5 Turbo models since `gpt-3.5-turbo-1106`.
 	//
 	// Setting to `{ "type": "json_schema", "json_schema": {...} }` enables Structured
 	// Outputs which ensures the model will match your supplied JSON schema. Learn more
 	// in the
-	// [Structured Outputs guide](https://platform.openai.com/docs/guides/structured-outputs).
+	// [Structured Outputs guide](https://developers.openai.com/api/docs/guides/structured-outputs).
 	//
 	// Setting to `{ "type": "json_object" }` enables JSON mode, which ensures the
 	// message the model generates is valid JSON.
@@ -761,15 +765,6 @@ func (u *BetaThreadRunNewParamsAdditionalMessageContentUnion) UnmarshalJSON(data
 	return apijson.UnmarshalRoot(data, u)
 }
 
-func (u *BetaThreadRunNewParamsAdditionalMessageContentUnion) asAny() any {
-	if !param.IsOmitted(u.OfString) {
-		return &u.OfString.Value
-	} else if !param.IsOmitted(u.OfArrayOfContentParts) {
-		return &u.OfArrayOfContentParts
-	}
-	return nil
-}
-
 type BetaThreadRunNewParamsAdditionalMessageAttachment struct {
 	// The ID of the file to attach to the message.
 	FileID param.Opt[string] `json:"file_id,omitzero"`
@@ -802,15 +797,6 @@ func (u *BetaThreadRunNewParamsAdditionalMessageAttachmentToolUnion) UnmarshalJS
 	return apijson.UnmarshalRoot(data, u)
 }
 
-func (u *BetaThreadRunNewParamsAdditionalMessageAttachmentToolUnion) asAny() any {
-	if !param.IsOmitted(u.OfCodeInterpreter) {
-		return u.OfCodeInterpreter
-	} else if !param.IsOmitted(u.OfFileSearch) {
-		return u.OfFileSearch
-	}
-	return nil
-}
-
 // Returns a pointer to the underlying variant's property, if present.
 func (u BetaThreadRunNewParamsAdditionalMessageAttachmentToolUnion) GetType() *string {
 	if vt := u.OfCodeInterpreter; vt != nil {
@@ -839,7 +825,7 @@ func NewBetaThreadRunNewParamsAdditionalMessageAttachmentToolFileSearch() BetaTh
 // [NewBetaThreadRunNewParamsAdditionalMessageAttachmentToolFileSearch].
 type BetaThreadRunNewParamsAdditionalMessageAttachmentToolFileSearch struct {
 	// The type of tool being defined: `file_search`
-	Type constant.FileSearch `json:"type" api:"required"`
+	Type constant.FileSearch `json:"type" default:"file_search"`
 	paramObj
 }
 

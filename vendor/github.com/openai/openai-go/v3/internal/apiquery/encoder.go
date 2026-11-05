@@ -29,7 +29,7 @@ type encoderField struct {
 }
 
 type encoderEntry struct {
-	reflect.Type
+	typ        reflect.Type
 	dateFormat string
 	root       bool
 	settings   QuerySettings
@@ -42,7 +42,7 @@ type Pair struct {
 
 func (e *encoder) typeEncoder(t reflect.Type) encoderFunc {
 	entry := encoderEntry{
-		Type:       t,
+		typ:        t,
 		dateFormat: e.dateFormat,
 		root:       e.root,
 		settings:   e.settings,
@@ -91,6 +91,17 @@ func (e *encoder) newTypeEncoder(t reflect.Type) encoderFunc {
 
 	if t.Implements(reflect.TypeOf((*param.Optional)(nil)).Elem()) {
 		return e.newRichFieldTypeEncoder(t)
+	}
+
+	// Parameter unions must use query encoding for the selected variant, even
+	// when generated code also provides JSON marshaling for request bodies.
+	if t.Kind() == reflect.Struct {
+		for i := 0; i < t.NumField(); i++ {
+			if t.Field(i).Type == paramUnionType && t.Field(i).Anonymous {
+				e.root = false
+				return e.newStructUnionTypeEncoder(t)
+			}
+		}
 	}
 
 	if !e.root && t.Implements(reflect.TypeOf((*json.Marshaler)(nil)).Elem()) {
@@ -238,7 +249,8 @@ func (e *encoder) newStructUnionTypeEncoder(t reflect.Type) encoderFunc {
 func (e *encoder) newMapEncoder(t reflect.Type) encoderFunc {
 	keyEncoder := e.typeEncoder(t.Key())
 	elementEncoder := e.typeEncoder(t.Elem())
-	return func(key string, value reflect.Value) (pairs []Pair, err error) {
+	return func(key string, value reflect.Value) ([]Pair, error) {
+		var pairs []Pair
 		iter := value.MapRange()
 		for iter.Next() {
 			encodedKey, err := keyEncoder("", iter.Key())
@@ -250,13 +262,13 @@ func (e *encoder) newMapEncoder(t reflect.Type) encoderFunc {
 			}
 			subkey := encodedKey[0].value
 			keyPath := e.renderKeyPath(key, subkey)
-			subpairs, suberr := elementEncoder(keyPath, iter.Value())
-			if suberr != nil {
-				err = suberr
+			subpairs, err := elementEncoder(keyPath, iter.Value())
+			if err != nil {
+				return nil, err
 			}
 			pairs = append(pairs, subpairs...)
 		}
-		return pairs, err
+		return pairs, nil
 	}
 }
 
@@ -353,7 +365,11 @@ func (e *encoder) newPrimitiveTypeEncoder(t reflect.Type) encoderFunc {
 		return func(key string, v reflect.Value) ([]Pair, error) {
 			return []Pair{{key, strconv.FormatUint(v.Uint(), 10)}}, nil
 		}
-	case reflect.Float32, reflect.Float64:
+	case reflect.Float32:
+		return func(key string, v reflect.Value) ([]Pair, error) {
+			return []Pair{{key, strconv.FormatFloat(v.Float(), 'f', -1, 32)}}, nil
+		}
+	case reflect.Float64:
 		return func(key string, v reflect.Value) ([]Pair, error) {
 			return []Pair{{key, strconv.FormatFloat(v.Float(), 'f', -1, 64)}}, nil
 		}

@@ -1,4 +1,4 @@
-// File generated from our OpenAPI spec by Stainless. See CONTRIBUTING.md for details.
+// File generated from our OpenAPI spec by Castiron. See CONTRIBUTING.md for details.
 
 package openai
 
@@ -6,7 +6,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"net/url"
 	"slices"
@@ -39,9 +38,11 @@ type BetaThreadRunStepService struct {
 // NewBetaThreadRunStepService generates a new service that applies the given
 // options to each request. These options are applied after the parent client's
 // options (if there is one), and before any request-specific options.
+//
+// Deprecated: The Assistants API is deprecated in favor of the Responses API
 func NewBetaThreadRunStepService(opts ...option.RequestOption) (r BetaThreadRunStepService) {
 	r = BetaThreadRunStepService{}
-	r.Options = opts
+	r.Options = requestconfig.InheritedOptions(opts...)
 	return
 }
 
@@ -49,7 +50,8 @@ func NewBetaThreadRunStepService(opts ...option.RequestOption) (r BetaThreadRunS
 //
 // Deprecated: The Assistants API is deprecated in favor of the Responses API
 func (r *BetaThreadRunStepService) Get(ctx context.Context, threadID string, runID string, stepID string, query BetaThreadRunStepGetParams, opts ...option.RequestOption) (res *RunStep, err error) {
-	opts = slices.Concat(r.Options, opts)
+	var preClientOpts = []option.RequestOption{requestconfig.WithBearerAuthSecurity()}
+	opts = slices.Concat(preClientOpts, r.Options, opts)
 	opts = append([]option.RequestOption{option.WithHeader("OpenAI-Beta", "assistants=v2")}, opts...)
 	if threadID == "" {
 		err = errors.New("missing required thread_id parameter")
@@ -63,7 +65,7 @@ func (r *BetaThreadRunStepService) Get(ctx context.Context, threadID string, run
 		err = errors.New("missing required step_id parameter")
 		return nil, err
 	}
-	path := fmt.Sprintf("threads/%s/runs/%s/steps/%s", threadID, runID, stepID)
+	path := requestconfig.FormatPath("threads/%s/runs/%s/steps/%s", threadID, runID, stepID)
 	err = requestconfig.ExecuteNewRequest(ctx, http.MethodGet, path, query, &res, opts...)
 	return res, err
 }
@@ -73,7 +75,8 @@ func (r *BetaThreadRunStepService) Get(ctx context.Context, threadID string, run
 // Deprecated: The Assistants API is deprecated in favor of the Responses API
 func (r *BetaThreadRunStepService) List(ctx context.Context, threadID string, runID string, query BetaThreadRunStepListParams, opts ...option.RequestOption) (res *pagination.CursorPage[RunStep], err error) {
 	var raw *http.Response
-	opts = slices.Concat(r.Options, opts)
+	var preClientOpts = []option.RequestOption{requestconfig.WithBearerAuthSecurity()}
+	opts = slices.Concat(preClientOpts, r.Options, opts)
 	opts = append([]option.RequestOption{option.WithHeader("OpenAI-Beta", "assistants=v2"), option.WithResponseInto(&raw)}, opts...)
 	if threadID == "" {
 		err = errors.New("missing required thread_id parameter")
@@ -83,7 +86,7 @@ func (r *BetaThreadRunStepService) List(ctx context.Context, threadID string, ru
 		err = errors.New("missing required run_id parameter")
 		return nil, err
 	}
-	path := fmt.Sprintf("threads/%s/runs/%s/steps", threadID, runID)
+	path := requestconfig.FormatPath("threads/%s/runs/%s/steps", threadID, runID)
 	cfg, err := requestconfig.NewRequestConfig(ctx, http.MethodGet, path, query, &res, opts...)
 	if err != nil {
 		return nil, err
@@ -108,7 +111,7 @@ type CodeInterpreterLogs struct {
 	// The index of the output in the outputs array.
 	Index int64 `json:"index" api:"required"`
 	// Always `logs`.
-	Type constant.Logs `json:"type" api:"required"`
+	Type constant.Logs `json:"type" default:"logs"`
 	// The text output from the Code Interpreter tool call.
 	Logs string `json:"logs"`
 	// JSON contains metadata for fields, check presence with [respjson.Field.Valid].
@@ -131,7 +134,7 @@ type CodeInterpreterOutputImage struct {
 	// The index of the output in the outputs array.
 	Index int64 `json:"index" api:"required"`
 	// Always `image`.
-	Type  constant.Image                  `json:"type" api:"required"`
+	Type  constant.Image                  `json:"type" default:"image"`
 	Image CodeInterpreterOutputImageImage `json:"image"`
 	// JSON contains metadata for fields, check presence with [respjson.Field.Valid].
 	JSON struct {
@@ -150,8 +153,8 @@ func (r *CodeInterpreterOutputImage) UnmarshalJSON(data []byte) error {
 }
 
 type CodeInterpreterOutputImageImage struct {
-	// The [file](https://platform.openai.com/docs/api-reference/files) ID of the
-	// image.
+	// The [file](https://developers.openai.com/api/reference/resources/files) ID of
+	// the image.
 	FileID string `json:"file_id"`
 	// JSON contains metadata for fields, check presence with [respjson.Field.Valid].
 	JSON struct {
@@ -175,7 +178,7 @@ type CodeInterpreterToolCall struct {
 	CodeInterpreter CodeInterpreterToolCallCodeInterpreter `json:"code_interpreter" api:"required"`
 	// The type of tool call. This is always going to be `code_interpreter` for this
 	// type of tool call.
-	Type constant.CodeInterpreter `json:"type" api:"required"`
+	Type constant.CodeInterpreter `json:"type" default:"code_interpreter"`
 	// JSON contains metadata for fields, check presence with [respjson.Field.Valid].
 	JSON struct {
 		ID              respjson.Field
@@ -269,12 +272,12 @@ func (u CodeInterpreterToolCallCodeInterpreterOutputUnion) AsAny() anyCodeInterp
 }
 
 func (u CodeInterpreterToolCallCodeInterpreterOutputUnion) AsLogs() (v CodeInterpreterToolCallCodeInterpreterOutputLogs) {
-	apijson.UnmarshalRoot(json.RawMessage(u.JSON.raw), &v)
+	_ = apijson.UnmarshalRoot(json.RawMessage(u.JSON.raw), &v)
 	return
 }
 
 func (u CodeInterpreterToolCallCodeInterpreterOutputUnion) AsImage() (v CodeInterpreterToolCallCodeInterpreterOutputImage) {
-	apijson.UnmarshalRoot(json.RawMessage(u.JSON.raw), &v)
+	_ = apijson.UnmarshalRoot(json.RawMessage(u.JSON.raw), &v)
 	return
 }
 
@@ -290,7 +293,7 @@ type CodeInterpreterToolCallCodeInterpreterOutputLogs struct {
 	// The text output from the Code Interpreter tool call.
 	Logs string `json:"logs" api:"required"`
 	// Always `logs`.
-	Type constant.Logs `json:"type" api:"required"`
+	Type constant.Logs `json:"type" default:"logs"`
 	// JSON contains metadata for fields, check presence with [respjson.Field.Valid].
 	JSON struct {
 		Logs        respjson.Field
@@ -309,7 +312,7 @@ func (r *CodeInterpreterToolCallCodeInterpreterOutputLogs) UnmarshalJSON(data []
 type CodeInterpreterToolCallCodeInterpreterOutputImage struct {
 	Image CodeInterpreterToolCallCodeInterpreterOutputImageImage `json:"image" api:"required"`
 	// Always `image`.
-	Type constant.Image `json:"type" api:"required"`
+	Type constant.Image `json:"type" default:"image"`
 	// JSON contains metadata for fields, check presence with [respjson.Field.Valid].
 	JSON struct {
 		Image       respjson.Field
@@ -326,8 +329,8 @@ func (r *CodeInterpreterToolCallCodeInterpreterOutputImage) UnmarshalJSON(data [
 }
 
 type CodeInterpreterToolCallCodeInterpreterOutputImageImage struct {
-	// The [file](https://platform.openai.com/docs/api-reference/files) ID of the
-	// image.
+	// The [file](https://developers.openai.com/api/reference/resources/files) ID of
+	// the image.
 	FileID string `json:"file_id" api:"required"`
 	// JSON contains metadata for fields, check presence with [respjson.Field.Valid].
 	JSON struct {
@@ -349,7 +352,7 @@ type CodeInterpreterToolCallDelta struct {
 	Index int64 `json:"index" api:"required"`
 	// The type of tool call. This is always going to be `code_interpreter` for this
 	// type of tool call.
-	Type constant.CodeInterpreter `json:"type" api:"required"`
+	Type constant.CodeInterpreter `json:"type" default:"code_interpreter"`
 	// The ID of the tool call.
 	ID string `json:"id"`
 	// The Code Interpreter tool call definition.
@@ -448,12 +451,12 @@ func (u CodeInterpreterToolCallDeltaCodeInterpreterOutputUnion) AsAny() anyCodeI
 }
 
 func (u CodeInterpreterToolCallDeltaCodeInterpreterOutputUnion) AsLogs() (v CodeInterpreterLogs) {
-	apijson.UnmarshalRoot(json.RawMessage(u.JSON.raw), &v)
+	_ = apijson.UnmarshalRoot(json.RawMessage(u.JSON.raw), &v)
 	return
 }
 
 func (u CodeInterpreterToolCallDeltaCodeInterpreterOutputUnion) AsImage() (v CodeInterpreterOutputImage) {
-	apijson.UnmarshalRoot(json.RawMessage(u.JSON.raw), &v)
+	_ = apijson.UnmarshalRoot(json.RawMessage(u.JSON.raw), &v)
 	return
 }
 
@@ -471,7 +474,7 @@ type FileSearchToolCall struct {
 	FileSearch FileSearchToolCallFileSearch `json:"file_search" api:"required"`
 	// The type of tool call. This is always going to be `file_search` for this type of
 	// tool call.
-	Type constant.FileSearch `json:"type" api:"required"`
+	Type constant.FileSearch `json:"type" default:"file_search"`
 	// JSON contains metadata for fields, check presence with [respjson.Field.Valid].
 	JSON struct {
 		ID          respjson.Field
@@ -592,7 +595,7 @@ type FileSearchToolCallDelta struct {
 	Index int64 `json:"index" api:"required"`
 	// The type of tool call. This is always going to be `file_search` for this type of
 	// tool call.
-	Type constant.FileSearch `json:"type" api:"required"`
+	Type constant.FileSearch `json:"type" default:"file_search"`
 	// The ID of the tool call object.
 	ID string `json:"id"`
 	// JSON contains metadata for fields, check presence with [respjson.Field.Valid].
@@ -619,7 +622,7 @@ type FunctionToolCall struct {
 	Function FunctionToolCallFunction `json:"function" api:"required"`
 	// The type of tool call. This is always going to be `function` for this type of
 	// tool call.
-	Type constant.Function `json:"type" api:"required"`
+	Type constant.Function `json:"type" default:"function"`
 	// JSON contains metadata for fields, check presence with [respjson.Field.Valid].
 	JSON struct {
 		ID          respjson.Field
@@ -643,8 +646,7 @@ type FunctionToolCallFunction struct {
 	// The name of the function.
 	Name string `json:"name" api:"required"`
 	// The output of the function. This will be `null` if the outputs have not been
-	// [submitted](https://platform.openai.com/docs/api-reference/runs/submitToolOutputs)
-	// yet.
+	// [submitted](https://developers.openai.com/api/docs/assistants/migration) yet.
 	Output string `json:"output" api:"required"`
 	// JSON contains metadata for fields, check presence with [respjson.Field.Valid].
 	JSON struct {
@@ -667,7 +669,7 @@ type FunctionToolCallDelta struct {
 	Index int64 `json:"index" api:"required"`
 	// The type of tool call. This is always going to be `function` for this type of
 	// tool call.
-	Type constant.Function `json:"type" api:"required"`
+	Type constant.Function `json:"type" default:"function"`
 	// The ID of the tool call object.
 	ID string `json:"id"`
 	// The definition of the function that was called.
@@ -696,8 +698,7 @@ type FunctionToolCallDeltaFunction struct {
 	// The name of the function.
 	Name string `json:"name"`
 	// The output of the function. This will be `null` if the outputs have not been
-	// [submitted](https://platform.openai.com/docs/api-reference/runs/submitToolOutputs)
-	// yet.
+	// [submitted](https://developers.openai.com/api/docs/assistants/migration) yet.
 	Output string `json:"output" api:"nullable"`
 	// JSON contains metadata for fields, check presence with [respjson.Field.Valid].
 	JSON struct {
@@ -719,7 +720,7 @@ func (r *FunctionToolCallDeltaFunction) UnmarshalJSON(data []byte) error {
 type MessageCreationStepDetails struct {
 	MessageCreation MessageCreationStepDetailsMessageCreation `json:"message_creation" api:"required"`
 	// Always `message_creation`.
-	Type constant.MessageCreation `json:"type" api:"required"`
+	Type constant.MessageCreation `json:"type" default:"message_creation"`
 	// JSON contains metadata for fields, check presence with [respjson.Field.Valid].
 	JSON struct {
 		MessageCreation respjson.Field
@@ -757,20 +758,20 @@ type RunStep struct {
 	// The identifier of the run step, which can be referenced in API endpoints.
 	ID string `json:"id" api:"required"`
 	// The ID of the
-	// [assistant](https://platform.openai.com/docs/api-reference/assistants)
+	// [assistant](https://developers.openai.com/api/docs/assistants/migration)
 	// associated with the run step.
 	AssistantID string `json:"assistant_id" api:"required"`
 	// The Unix timestamp (in seconds) for when the run step was cancelled.
-	CancelledAt int64 `json:"cancelled_at" api:"required"`
+	CancelledAt int64 `json:"cancelled_at" api:"required" format:"unixtime"`
 	// The Unix timestamp (in seconds) for when the run step completed.
-	CompletedAt int64 `json:"completed_at" api:"required"`
+	CompletedAt int64 `json:"completed_at" api:"required" format:"unixtime"`
 	// The Unix timestamp (in seconds) for when the run step was created.
-	CreatedAt int64 `json:"created_at" api:"required"`
+	CreatedAt int64 `json:"created_at" api:"required" format:"unixtime"`
 	// The Unix timestamp (in seconds) for when the run step expired. A step is
 	// considered expired if the parent run is expired.
-	ExpiredAt int64 `json:"expired_at" api:"required"`
+	ExpiredAt int64 `json:"expired_at" api:"required" format:"unixtime"`
 	// The Unix timestamp (in seconds) for when the run step failed.
-	FailedAt int64 `json:"failed_at" api:"required"`
+	FailedAt int64 `json:"failed_at" api:"required" format:"unixtime"`
 	// The last error associated with this run step. Will be `null` if there are no
 	// errors.
 	LastError RunStepLastError `json:"last_error" api:"required"`
@@ -782,9 +783,9 @@ type RunStep struct {
 	// a maximum length of 512 characters.
 	Metadata shared.Metadata `json:"metadata" api:"required"`
 	// The object type, which is always `thread.run.step`.
-	Object constant.ThreadRunStep `json:"object" api:"required"`
-	// The ID of the [run](https://platform.openai.com/docs/api-reference/runs) that
-	// this run step is a part of.
+	Object constant.ThreadRunStep `json:"object" default:"thread.run.step"`
+	// The ID of the [run](https://developers.openai.com/api/docs/assistants/migration)
+	// that this run step is a part of.
 	RunID string `json:"run_id" api:"required"`
 	// The status of the run step, which can be either `in_progress`, `cancelled`,
 	// `failed`, `completed`, or `expired`.
@@ -793,8 +794,9 @@ type RunStep struct {
 	Status RunStepStatus `json:"status" api:"required"`
 	// The details of the run step.
 	StepDetails RunStepStepDetailsUnion `json:"step_details" api:"required"`
-	// The ID of the [thread](https://platform.openai.com/docs/api-reference/threads)
-	// that was run.
+	// The ID of the
+	// [thread](https://developers.openai.com/api/docs/assistants/migration) that was
+	// run.
 	ThreadID string `json:"thread_id" api:"required"`
 	// The type of run step, which can be either `message_creation` or `tool_calls`.
 	//
@@ -918,12 +920,12 @@ func (u RunStepStepDetailsUnion) AsAny() anyRunStepStepDetails {
 }
 
 func (u RunStepStepDetailsUnion) AsMessageCreation() (v MessageCreationStepDetails) {
-	apijson.UnmarshalRoot(json.RawMessage(u.JSON.raw), &v)
+	_ = apijson.UnmarshalRoot(json.RawMessage(u.JSON.raw), &v)
 	return
 }
 
 func (u RunStepStepDetailsUnion) AsToolCalls() (v ToolCallsStepDetails) {
-	apijson.UnmarshalRoot(json.RawMessage(u.JSON.raw), &v)
+	_ = apijson.UnmarshalRoot(json.RawMessage(u.JSON.raw), &v)
 	return
 }
 
@@ -1035,12 +1037,12 @@ func (u RunStepDeltaStepDetailsUnion) AsAny() anyRunStepDeltaStepDetails {
 }
 
 func (u RunStepDeltaStepDetailsUnion) AsMessageCreation() (v RunStepDeltaMessageDelta) {
-	apijson.UnmarshalRoot(json.RawMessage(u.JSON.raw), &v)
+	_ = apijson.UnmarshalRoot(json.RawMessage(u.JSON.raw), &v)
 	return
 }
 
 func (u RunStepDeltaStepDetailsUnion) AsToolCalls() (v ToolCallDeltaObject) {
-	apijson.UnmarshalRoot(json.RawMessage(u.JSON.raw), &v)
+	_ = apijson.UnmarshalRoot(json.RawMessage(u.JSON.raw), &v)
 	return
 }
 
@@ -1059,7 +1061,7 @@ type RunStepDeltaEvent struct {
 	// The delta containing the fields that have changed on the run step.
 	Delta RunStepDelta `json:"delta" api:"required"`
 	// The object type, which is always `thread.run.step.delta`.
-	Object constant.ThreadRunStepDelta `json:"object" api:"required"`
+	Object constant.ThreadRunStepDelta `json:"object" default:"thread.run.step.delta"`
 	// JSON contains metadata for fields, check presence with [respjson.Field.Valid].
 	JSON struct {
 		ID          respjson.Field
@@ -1079,7 +1081,7 @@ func (r *RunStepDeltaEvent) UnmarshalJSON(data []byte) error {
 // Details of the message creation by the run step.
 type RunStepDeltaMessageDelta struct {
 	// Always `message_creation`.
-	Type            constant.MessageCreation                `json:"type" api:"required"`
+	Type            constant.MessageCreation                `json:"type" default:"message_creation"`
 	MessageCreation RunStepDeltaMessageDeltaMessageCreation `json:"message_creation"`
 	// JSON contains metadata for fields, check presence with [respjson.Field.Valid].
 	JSON struct {
@@ -1177,17 +1179,17 @@ func (u ToolCallUnion) AsAny() anyToolCall {
 }
 
 func (u ToolCallUnion) AsCodeInterpreter() (v CodeInterpreterToolCall) {
-	apijson.UnmarshalRoot(json.RawMessage(u.JSON.raw), &v)
+	_ = apijson.UnmarshalRoot(json.RawMessage(u.JSON.raw), &v)
 	return
 }
 
 func (u ToolCallUnion) AsFileSearch() (v FileSearchToolCall) {
-	apijson.UnmarshalRoot(json.RawMessage(u.JSON.raw), &v)
+	_ = apijson.UnmarshalRoot(json.RawMessage(u.JSON.raw), &v)
 	return
 }
 
 func (u ToolCallUnion) AsFunction() (v FunctionToolCall) {
-	apijson.UnmarshalRoot(json.RawMessage(u.JSON.raw), &v)
+	_ = apijson.UnmarshalRoot(json.RawMessage(u.JSON.raw), &v)
 	return
 }
 
@@ -1259,17 +1261,17 @@ func (u ToolCallDeltaUnion) AsAny() anyToolCallDelta {
 }
 
 func (u ToolCallDeltaUnion) AsCodeInterpreter() (v CodeInterpreterToolCallDelta) {
-	apijson.UnmarshalRoot(json.RawMessage(u.JSON.raw), &v)
+	_ = apijson.UnmarshalRoot(json.RawMessage(u.JSON.raw), &v)
 	return
 }
 
 func (u ToolCallDeltaUnion) AsFileSearch() (v FileSearchToolCallDelta) {
-	apijson.UnmarshalRoot(json.RawMessage(u.JSON.raw), &v)
+	_ = apijson.UnmarshalRoot(json.RawMessage(u.JSON.raw), &v)
 	return
 }
 
 func (u ToolCallDeltaUnion) AsFunction() (v FunctionToolCallDelta) {
-	apijson.UnmarshalRoot(json.RawMessage(u.JSON.raw), &v)
+	_ = apijson.UnmarshalRoot(json.RawMessage(u.JSON.raw), &v)
 	return
 }
 
@@ -1283,7 +1285,7 @@ func (r *ToolCallDeltaUnion) UnmarshalJSON(data []byte) error {
 // Details of the tool call.
 type ToolCallDeltaObject struct {
 	// Always `tool_calls`.
-	Type constant.ToolCalls `json:"type" api:"required"`
+	Type constant.ToolCalls `json:"type" default:"tool_calls"`
 	// An array of tool calls the run step was involved in. These can be associated
 	// with one of three types of tools: `code_interpreter`, `file_search`, or
 	// `function`.
@@ -1310,7 +1312,7 @@ type ToolCallsStepDetails struct {
 	// `function`.
 	ToolCalls []ToolCallUnion `json:"tool_calls" api:"required"`
 	// Always `tool_calls`.
-	Type constant.ToolCalls `json:"type" api:"required"`
+	Type constant.ToolCalls `json:"type" default:"tool_calls"`
 	// JSON contains metadata for fields, check presence with [respjson.Field.Valid].
 	JSON struct {
 		ToolCalls   respjson.Field
@@ -1332,7 +1334,7 @@ type BetaThreadRunStepGetParams struct {
 	// to fetch the file search result content.
 	//
 	// See the
-	// [file search tool documentation](https://platform.openai.com/docs/assistants/tools/file-search#customizing-file-search-settings)
+	// [file search tool documentation](https://developers.openai.com/api/docs/guides/tools-file-search#retrieval-customization)
 	// for more information.
 	Include []RunStepInclude `query:"include,omitzero" json:"-"`
 	paramObj
@@ -1366,7 +1368,7 @@ type BetaThreadRunStepListParams struct {
 	// to fetch the file search result content.
 	//
 	// See the
-	// [file search tool documentation](https://platform.openai.com/docs/assistants/tools/file-search#customizing-file-search-settings)
+	// [file search tool documentation](https://developers.openai.com/api/docs/guides/tools-file-search#retrieval-customization)
 	// for more information.
 	Include []RunStepInclude `query:"include,omitzero" json:"-"`
 	// Sort order by the `created_at` timestamp of the objects. `asc` for ascending

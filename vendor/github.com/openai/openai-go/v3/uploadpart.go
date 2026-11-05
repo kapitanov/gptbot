@@ -1,4 +1,4 @@
-// File generated from our OpenAPI spec by Stainless. See CONTRIBUTING.md for details.
+// File generated from our OpenAPI spec by Castiron. See CONTRIBUTING.md for details.
 
 package openai
 
@@ -6,7 +6,6 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"fmt"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -37,29 +36,31 @@ type UploadPartService struct {
 // there is one), and before any request-specific options.
 func NewUploadPartService(opts ...option.RequestOption) (r UploadPartService) {
 	r = UploadPartService{}
-	r.Options = opts
+	r.Options = requestconfig.InheritedOptions(opts...)
 	return
 }
 
 // Adds a
-// [Part](https://platform.openai.com/docs/api-reference/uploads/part-object) to an
-// [Upload](https://platform.openai.com/docs/api-reference/uploads/object) object.
-// A Part represents a chunk of bytes from the file you are trying to upload.
+// [Part](https://developers.openai.com/api/reference/resources/uploads/subresources/parts)
+// to an [Upload](https://developers.openai.com/api/reference/resources/uploads)
+// object. A Part represents a chunk of bytes from the file you are trying to
+// upload.
 //
 // Each Part can be at most 64 MB, and you can add Parts until you hit the Upload
 // maximum of 8 GB.
 //
 // It is possible to add multiple Parts in parallel. You can decide the intended
 // order of the Parts when you
-// [complete the Upload](https://platform.openai.com/docs/api-reference/uploads/complete).
+// [complete the Upload](https://developers.openai.com/api/reference/resources/uploads/methods/complete).
 func (r *UploadPartService) New(ctx context.Context, uploadID string, body UploadPartNewParams, opts ...option.RequestOption) (res *UploadPart, err error) {
-	opts = slices.Concat(r.Options, opts)
+	var preClientOpts = []option.RequestOption{requestconfig.WithBearerAuthSecurity()}
+	opts = slices.Concat(preClientOpts, r.Options, opts)
 	if uploadID == "" {
 		err = errors.New("missing required upload_id parameter")
 		return nil, err
 	}
-	path := fmt.Sprintf("uploads/%s/parts", uploadID)
-	err = requestconfig.ExecuteNewRequest(ctx, http.MethodPost, path, body, &res, opts...)
+	path := requestconfig.FormatPath("uploads/%s/parts", uploadID)
+	err = requestconfig.ExecuteNewRequest(ctx, http.MethodPost, path, requestconfig.MultipartBody(body), &res, opts...)
 	return res, err
 }
 
@@ -68,9 +69,9 @@ type UploadPart struct {
 	// The upload Part unique identifier, which can be referenced in API endpoints.
 	ID string `json:"id" api:"required"`
 	// The Unix timestamp (in seconds) for when the Part was created.
-	CreatedAt int64 `json:"created_at" api:"required"`
+	CreatedAt int64 `json:"created_at" api:"required" format:"unixtime"`
 	// The object type, which is always `upload.part`.
-	Object constant.UploadPart `json:"object" api:"required"`
+	Object constant.UploadPart `json:"object" default:"upload.part"`
 	// The ID of the Upload object that this Part was added to.
 	UploadID string `json:"upload_id" api:"required"`
 	// JSON contains metadata for fields, check presence with [respjson.Field.Valid].
@@ -104,7 +105,7 @@ func (r UploadPartNewParams) MarshalMultipart() (data []byte, contentType string
 		err = apiform.WriteExtras(writer, r.ExtraFields())
 	}
 	if err != nil {
-		writer.Close()
+		_ = writer.Close()
 		return nil, "", err
 	}
 	err = writer.Close()
@@ -112,4 +113,13 @@ func (r UploadPartNewParams) MarshalMultipart() (data []byte, contentType string
 		return nil, "", err
 	}
 	return buf.Bytes(), writer.FormDataContentType(), nil
+}
+
+// MarshalMultipartTo writes multipart fields without buffering file contents.
+// The caller owns writer and must close it to finish the multipart body.
+func (r UploadPartNewParams) MarshalMultipartTo(writer *multipart.Writer) error {
+	if err := apiform.MarshalRoot(r, writer); err != nil {
+		return err
+	}
+	return apiform.WriteExtras(writer, r.ExtraFields())
 }

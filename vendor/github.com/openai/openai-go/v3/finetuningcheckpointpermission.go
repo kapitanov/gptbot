@@ -1,11 +1,10 @@
-// File generated from our OpenAPI spec by Stainless. See CONTRIBUTING.md for details.
+// File generated from our OpenAPI spec by Castiron. See CONTRIBUTING.md for details.
 
 package openai
 
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net/http"
 	"net/url"
 	"slices"
@@ -37,23 +36,25 @@ type FineTuningCheckpointPermissionService struct {
 // client's options (if there is one), and before any request-specific options.
 func NewFineTuningCheckpointPermissionService(opts ...option.RequestOption) (r FineTuningCheckpointPermissionService) {
 	r = FineTuningCheckpointPermissionService{}
-	r.Options = opts
+	r.Options = requestconfig.InheritedOptions(opts...)
 	return
 }
 
-// **NOTE:** Calling this endpoint requires an [admin API key](../admin-api-keys).
+// **NOTE:** Calling this endpoint requires an
+// [admin API key](https://developers.openai.com/api/reference/resources/admin/subresources/organization/subresources/admin_api_keys).
 //
 // This enables organization owners to share fine-tuned models with other projects
 // in their organization.
 func (r *FineTuningCheckpointPermissionService) New(ctx context.Context, fineTunedModelCheckpoint string, body FineTuningCheckpointPermissionNewParams, opts ...option.RequestOption) (res *pagination.Page[FineTuningCheckpointPermissionNewResponse], err error) {
 	var raw *http.Response
-	opts = slices.Concat(r.Options, opts)
+	var preClientOpts = []option.RequestOption{requestconfig.WithAdminAPIKeyAuthSecurity()}
+	opts = slices.Concat(preClientOpts, r.Options, opts)
 	opts = append([]option.RequestOption{option.WithResponseInto(&raw)}, opts...)
 	if fineTunedModelCheckpoint == "" {
 		err = errors.New("missing required fine_tuned_model_checkpoint parameter")
 		return nil, err
 	}
-	path := fmt.Sprintf("fine_tuning/checkpoints/%s/permissions", fineTunedModelCheckpoint)
+	path := requestconfig.FormatPath("fine_tuning/checkpoints/%s/permissions", fineTunedModelCheckpoint)
 	cfg, err := requestconfig.NewRequestConfig(ctx, http.MethodPost, path, body, &res, opts...)
 	if err != nil {
 		return nil, err
@@ -66,7 +67,8 @@ func (r *FineTuningCheckpointPermissionService) New(ctx context.Context, fineTun
 	return res, nil
 }
 
-// **NOTE:** Calling this endpoint requires an [admin API key](../admin-api-keys).
+// **NOTE:** Calling this endpoint requires an
+// [admin API key](https://developers.openai.com/api/reference/resources/admin/subresources/organization/subresources/admin_api_keys).
 //
 // This enables organization owners to share fine-tuned models with other projects
 // in their organization.
@@ -74,7 +76,8 @@ func (r *FineTuningCheckpointPermissionService) NewAutoPaging(ctx context.Contex
 	return pagination.NewPageAutoPager(r.New(ctx, fineTunedModelCheckpoint, body, opts...))
 }
 
-// **NOTE:** This endpoint requires an [admin API key](../admin-api-keys).
+// **NOTE:** This endpoint requires an
+// [admin API key](https://developers.openai.com/api/reference/resources/admin/subresources/organization/subresources/admin_api_keys).
 //
 // Organization owners can use this endpoint to view all permissions for a
 // fine-tuned model checkpoint.
@@ -82,29 +85,32 @@ func (r *FineTuningCheckpointPermissionService) NewAutoPaging(ctx context.Contex
 // Deprecated: Retrieve is deprecated. Please swap to the paginated list method
 // instead.
 func (r *FineTuningCheckpointPermissionService) Get(ctx context.Context, fineTunedModelCheckpoint string, query FineTuningCheckpointPermissionGetParams, opts ...option.RequestOption) (res *FineTuningCheckpointPermissionGetResponse, err error) {
-	opts = slices.Concat(r.Options, opts)
+	var preClientOpts = []option.RequestOption{requestconfig.WithAdminAPIKeyAuthSecurity()}
+	opts = slices.Concat(preClientOpts, r.Options, opts)
 	if fineTunedModelCheckpoint == "" {
 		err = errors.New("missing required fine_tuned_model_checkpoint parameter")
 		return nil, err
 	}
-	path := fmt.Sprintf("fine_tuning/checkpoints/%s/permissions", fineTunedModelCheckpoint)
+	path := requestconfig.FormatPath("fine_tuning/checkpoints/%s/permissions", fineTunedModelCheckpoint)
 	err = requestconfig.ExecuteNewRequest(ctx, http.MethodGet, path, query, &res, opts...)
 	return res, err
 }
 
-// **NOTE:** This endpoint requires an [admin API key](../admin-api-keys).
+// **NOTE:** This endpoint requires an
+// [admin API key](https://developers.openai.com/api/reference/resources/admin/subresources/organization/subresources/admin_api_keys).
 //
 // Organization owners can use this endpoint to view all permissions for a
 // fine-tuned model checkpoint.
 func (r *FineTuningCheckpointPermissionService) List(ctx context.Context, fineTunedModelCheckpoint string, query FineTuningCheckpointPermissionListParams, opts ...option.RequestOption) (res *pagination.ConversationCursorPage[FineTuningCheckpointPermissionListResponse], err error) {
 	var raw *http.Response
-	opts = slices.Concat(r.Options, opts)
+	var preClientOpts = []option.RequestOption{requestconfig.WithAdminAPIKeyAuthSecurity()}
+	opts = slices.Concat(preClientOpts, r.Options, opts)
 	opts = append([]option.RequestOption{option.WithResponseInto(&raw)}, opts...)
 	if fineTunedModelCheckpoint == "" {
 		err = errors.New("missing required fine_tuned_model_checkpoint parameter")
 		return nil, err
 	}
-	path := fmt.Sprintf("fine_tuning/checkpoints/%s/permissions", fineTunedModelCheckpoint)
+	path := requestconfig.FormatPath("fine_tuning/checkpoints/%s/permissions", fineTunedModelCheckpoint)
 	cfg, err := requestconfig.NewRequestConfig(ctx, http.MethodGet, path, query, &res, opts...)
 	if err != nil {
 		return nil, err
@@ -117,7 +123,8 @@ func (r *FineTuningCheckpointPermissionService) List(ctx context.Context, fineTu
 	return res, nil
 }
 
-// **NOTE:** This endpoint requires an [admin API key](../admin-api-keys).
+// **NOTE:** This endpoint requires an
+// [admin API key](https://developers.openai.com/api/reference/resources/admin/subresources/organization/subresources/admin_api_keys).
 //
 // Organization owners can use this endpoint to view all permissions for a
 // fine-tuned model checkpoint.
@@ -125,12 +132,14 @@ func (r *FineTuningCheckpointPermissionService) ListAutoPaging(ctx context.Conte
 	return pagination.NewConversationCursorPageAutoPager(r.List(ctx, fineTunedModelCheckpoint, query, opts...))
 }
 
-// **NOTE:** This endpoint requires an [admin API key](../admin-api-keys).
+// **NOTE:** This endpoint requires an
+// [admin API key](https://developers.openai.com/api/reference/resources/admin/subresources/organization/subresources/admin_api_keys).
 //
 // Organization owners can use this endpoint to delete a permission for a
 // fine-tuned model checkpoint.
 func (r *FineTuningCheckpointPermissionService) Delete(ctx context.Context, fineTunedModelCheckpoint string, permissionID string, opts ...option.RequestOption) (res *FineTuningCheckpointPermissionDeleteResponse, err error) {
-	opts = slices.Concat(r.Options, opts)
+	var preClientOpts = []option.RequestOption{requestconfig.WithAdminAPIKeyAuthSecurity()}
+	opts = slices.Concat(preClientOpts, r.Options, opts)
 	if fineTunedModelCheckpoint == "" {
 		err = errors.New("missing required fine_tuned_model_checkpoint parameter")
 		return nil, err
@@ -139,7 +148,7 @@ func (r *FineTuningCheckpointPermissionService) Delete(ctx context.Context, fine
 		err = errors.New("missing required permission_id parameter")
 		return nil, err
 	}
-	path := fmt.Sprintf("fine_tuning/checkpoints/%s/permissions/%s", fineTunedModelCheckpoint, permissionID)
+	path := requestconfig.FormatPath("fine_tuning/checkpoints/%s/permissions/%s", fineTunedModelCheckpoint, permissionID)
 	err = requestconfig.ExecuteNewRequest(ctx, http.MethodDelete, path, nil, &res, opts...)
 	return res, err
 }
@@ -150,9 +159,9 @@ type FineTuningCheckpointPermissionNewResponse struct {
 	// The permission identifier, which can be referenced in the API endpoints.
 	ID string `json:"id" api:"required"`
 	// The Unix timestamp (in seconds) for when the permission was created.
-	CreatedAt int64 `json:"created_at" api:"required"`
+	CreatedAt int64 `json:"created_at" api:"required" format:"unixtime"`
 	// The object type, which is always "checkpoint.permission".
-	Object constant.CheckpointPermission `json:"object" api:"required"`
+	Object constant.CheckpointPermission `json:"object" default:"checkpoint.permission"`
 	// The project identifier that the permission is for.
 	ProjectID string `json:"project_id" api:"required"`
 	// JSON contains metadata for fields, check presence with [respjson.Field.Valid].
@@ -175,7 +184,7 @@ func (r *FineTuningCheckpointPermissionNewResponse) UnmarshalJSON(data []byte) e
 type FineTuningCheckpointPermissionGetResponse struct {
 	Data    []FineTuningCheckpointPermissionGetResponseData `json:"data" api:"required"`
 	HasMore bool                                            `json:"has_more" api:"required"`
-	Object  constant.List                                   `json:"object" api:"required"`
+	Object  constant.List                                   `json:"object" default:"list"`
 	FirstID string                                          `json:"first_id" api:"nullable"`
 	LastID  string                                          `json:"last_id" api:"nullable"`
 	// JSON contains metadata for fields, check presence with [respjson.Field.Valid].
@@ -202,9 +211,9 @@ type FineTuningCheckpointPermissionGetResponseData struct {
 	// The permission identifier, which can be referenced in the API endpoints.
 	ID string `json:"id" api:"required"`
 	// The Unix timestamp (in seconds) for when the permission was created.
-	CreatedAt int64 `json:"created_at" api:"required"`
+	CreatedAt int64 `json:"created_at" api:"required" format:"unixtime"`
 	// The object type, which is always "checkpoint.permission".
-	Object constant.CheckpointPermission `json:"object" api:"required"`
+	Object constant.CheckpointPermission `json:"object" default:"checkpoint.permission"`
 	// The project identifier that the permission is for.
 	ProjectID string `json:"project_id" api:"required"`
 	// JSON contains metadata for fields, check presence with [respjson.Field.Valid].
@@ -230,9 +239,9 @@ type FineTuningCheckpointPermissionListResponse struct {
 	// The permission identifier, which can be referenced in the API endpoints.
 	ID string `json:"id" api:"required"`
 	// The Unix timestamp (in seconds) for when the permission was created.
-	CreatedAt int64 `json:"created_at" api:"required"`
+	CreatedAt int64 `json:"created_at" api:"required" format:"unixtime"`
 	// The object type, which is always "checkpoint.permission".
-	Object constant.CheckpointPermission `json:"object" api:"required"`
+	Object constant.CheckpointPermission `json:"object" default:"checkpoint.permission"`
 	// The project identifier that the permission is for.
 	ProjectID string `json:"project_id" api:"required"`
 	// JSON contains metadata for fields, check presence with [respjson.Field.Valid].
@@ -258,7 +267,7 @@ type FineTuningCheckpointPermissionDeleteResponse struct {
 	// Whether the fine-tuned model checkpoint permission was successfully deleted.
 	Deleted bool `json:"deleted" api:"required"`
 	// The object type, which is always "checkpoint.permission".
-	Object constant.CheckpointPermission `json:"object" api:"required"`
+	Object constant.CheckpointPermission `json:"object" default:"checkpoint.permission"`
 	// JSON contains metadata for fields, check presence with [respjson.Field.Valid].
 	JSON struct {
 		ID          respjson.Field

@@ -1,11 +1,10 @@
-// File generated from our OpenAPI spec by Stainless. See CONTRIBUTING.md for details.
+// File generated from our OpenAPI spec by Castiron. See CONTRIBUTING.md for details.
 
 package openai
 
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net/http"
 	"slices"
 
@@ -28,14 +27,15 @@ type SkillVersionContentService struct {
 // options (if there is one), and before any request-specific options.
 func NewSkillVersionContentService(opts ...option.RequestOption) (r SkillVersionContentService) {
 	r = SkillVersionContentService{}
-	r.Options = opts
+	r.Options = requestconfig.InheritedOptions(opts...)
 	return
 }
 
 // Download a skill version zip bundle.
 func (r *SkillVersionContentService) Get(ctx context.Context, skillID string, version string, opts ...option.RequestOption) (res *http.Response, err error) {
-	opts = slices.Concat(r.Options, opts)
-	opts = append([]option.RequestOption{option.WithHeader("Accept", "application/binary")}, opts...)
+	var preClientOpts = []option.RequestOption{requestconfig.WithBearerAuthSecurity()}
+	opts = slices.Concat(preClientOpts, r.Options, opts)
+	opts = append([]option.RequestOption{option.WithHeader("Accept", "application/json, application/zip")}, opts...)
 	if skillID == "" {
 		err = errors.New("missing required skill_id parameter")
 		return nil, err
@@ -44,7 +44,7 @@ func (r *SkillVersionContentService) Get(ctx context.Context, skillID string, ve
 		err = errors.New("missing required version parameter")
 		return nil, err
 	}
-	path := fmt.Sprintf("skills/%s/versions/%s/content", skillID, version)
+	path := requestconfig.FormatPath("skills/%s/versions/%s/content", skillID, version)
 	err = requestconfig.ExecuteNewRequest(ctx, http.MethodGet, path, nil, &res, opts...)
 	return res, err
 }

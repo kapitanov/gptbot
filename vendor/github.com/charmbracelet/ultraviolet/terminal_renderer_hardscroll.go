@@ -8,7 +8,7 @@ import (
 
 // scrollOptimize optimizes the screen to transform the old buffer into the new
 // buffer.
-func (s *TerminalRenderer) scrollOptimize(newbuf *Buffer) {
+func (s *TerminalRenderer) scrollOptimize(newbuf *RenderBuffer) {
 	height := newbuf.Height()
 	if s.oldnum == nil || len(s.oldnum) < height {
 		s.oldnum = append(s.oldnum, make([]int, height-len(s.oldnum))...)
@@ -68,7 +68,7 @@ func (s *TerminalRenderer) scrollOptimize(newbuf *Buffer) {
 }
 
 // scrolln scrolls the screen up by n lines.
-func (s *TerminalRenderer) scrolln(newbuf *Buffer, n, top, bot, maxY int) (v bool) { //nolint:unparam
+func (s *TerminalRenderer) scrolln(newbuf *RenderBuffer, n, top, bot, maxY int) (v bool) { //nolint:unparam
 	blank := s.clearBlank()
 	if n > 0 { //nolint:nestif
 		// Scroll up (forward)
@@ -110,6 +110,11 @@ func (s *TerminalRenderer) scrolln(newbuf *Buffer, n, top, bot, maxY int) (v boo
 
 	s.scrollBuffer(s.curbuf, n, top, bot, blank)
 
+	// Every row in the range moved, whether or not the application drew into
+	// it. A row the scroll already put in the right place costs a comparison
+	// and no output, which is the whole point of scrolling in hardware.
+	s.damage(top, bot-top+1)
+
 	// shift hash values too, they can be reused
 	s.scrollOldhash(n, top, bot)
 
@@ -117,7 +122,7 @@ func (s *TerminalRenderer) scrolln(newbuf *Buffer, n, top, bot, maxY int) (v boo
 }
 
 // scrollBuffer scrolls the buffer by n lines.
-func (s *TerminalRenderer) scrollBuffer(b *Buffer, n, top, bot int, blank *Cell) {
+func (s *TerminalRenderer) scrollBuffer(b *RenderBuffer, n, top, bot int, blank *Cell) {
 	if top < 0 || bot < top || bot >= b.Height() {
 		// Nothing to scroll
 		return
@@ -144,29 +149,10 @@ func (s *TerminalRenderer) scrollBuffer(b *Buffer, n, top, bot int, blank *Cell)
 			b.FillArea(blank, Rect(0, line, b.Width(), 1))
 		}
 	}
-
-	s.touchLine(b, top, bot-top+1, true)
-}
-
-// touchLine marks the line as touched.
-func (s *TerminalRenderer) touchLine(newbuf *Buffer, y, n int, changed bool) {
-	height := newbuf.Height()
-	if n < 0 || y < 0 || y >= height || newbuf.Touched == nil || len(newbuf.Touched) < height {
-		return // Nothing to touch
-	}
-
-	width := newbuf.Width()
-	for i := y; i < y+n && i < height && i < len(newbuf.Touched); i++ {
-		if changed {
-			newbuf.TouchLine(0, i, width)
-		} else {
-			newbuf.Touched[i] = nil
-		}
-	}
 }
 
 // scrollUp scrolls the screen up by n lines.
-func (s *TerminalRenderer) scrollUp(newbuf *Buffer, n, top, bot, minY, maxY int, blank *Cell) bool {
+func (s *TerminalRenderer) scrollUp(newbuf *RenderBuffer, n, top, bot, minY, maxY int, blank *Cell) bool {
 	if n == 1 && top == minY && bot == maxY { //nolint:nestif
 		s.move(newbuf, 0, bot)
 		s.updatePen(blank)
@@ -195,7 +181,7 @@ func (s *TerminalRenderer) scrollUp(newbuf *Buffer, n, top, bot, minY, maxY int,
 }
 
 // scrollDown scrolls the screen down by n lines.
-func (s *TerminalRenderer) scrollDown(newbuf *Buffer, n, top, bot, minY, maxY int, blank *Cell) bool {
+func (s *TerminalRenderer) scrollDown(newbuf *RenderBuffer, n, top, bot, minY, maxY int, blank *Cell) bool {
 	if n == 1 && top == minY && bot == maxY { //nolint:nestif
 		s.move(newbuf, 0, top)
 		s.updatePen(blank)
@@ -224,7 +210,7 @@ func (s *TerminalRenderer) scrollDown(newbuf *Buffer, n, top, bot, minY, maxY in
 
 // scrollIdl scrolls the screen n lines by using [ansi.DL] at del and using
 // [ansi.IL] at ins.
-func (s *TerminalRenderer) scrollIdl(newbuf *Buffer, n, del, ins int, blank *Cell) bool {
+func (s *TerminalRenderer) scrollIdl(newbuf *RenderBuffer, n, del, ins int, blank *Cell) bool {
 	if n < 0 {
 		return false
 	}

@@ -1,15 +1,13 @@
-// File generated from our OpenAPI spec by Stainless. See CONTRIBUTING.md for details.
+// File generated from our OpenAPI spec by Castiron. See CONTRIBUTING.md for details.
 
 package openai
 
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net/http"
 	"net/url"
 	"slices"
-	"sync"
 
 	"github.com/openai/openai-go/v3/internal/apijson"
 	"github.com/openai/openai-go/v3/internal/apiquery"
@@ -29,92 +27,41 @@ import (
 // the [NewVectorStoreFileBatchService] method instead.
 type VectorStoreFileBatchService struct {
 	Options []option.RequestOption
+
+	// MaxUploadConcurrency limits the number of active uploads per UploadAndPoll
+	// call. Zero uses the default of 16; negative values are invalid.
+	// Set this before concurrent use. To override it for one call, copy the
+	// service first. Each active upload may buffer its entire body for retries.
+	MaxUploadConcurrency int
 }
 
 // NewVectorStoreFileBatchService generates a new service that applies the given
 // options to each request. These options are applied after the parent client's
 // options (if there is one), and before any request-specific options.
 func NewVectorStoreFileBatchService(opts ...option.RequestOption) (r VectorStoreFileBatchService) {
-	r = VectorStoreFileBatchService{}
-	r.Options = opts
+	r = VectorStoreFileBatchService{MaxUploadConcurrency: defaultVectorStoreFileBatchUploadConcurrency}
+	r.Options = requestconfig.InheritedOptions(opts...)
 	return
 }
 
 // Create a vector store file batch.
 func (r *VectorStoreFileBatchService) New(ctx context.Context, vectorStoreID string, body VectorStoreFileBatchNewParams, opts ...option.RequestOption) (res *VectorStoreFileBatch, err error) {
-	opts = slices.Concat(r.Options, opts)
+	var preClientOpts = []option.RequestOption{requestconfig.WithBearerAuthSecurity()}
+	opts = slices.Concat(preClientOpts, r.Options, opts)
 	opts = append([]option.RequestOption{option.WithHeader("OpenAI-Beta", "assistants=v2")}, opts...)
 	if vectorStoreID == "" {
 		err = errors.New("missing required vector_store_id parameter")
 		return nil, err
 	}
-	path := fmt.Sprintf("vector_stores/%s/file_batches", vectorStoreID)
+	path := requestconfig.FormatPath("vector_stores/%s/file_batches", vectorStoreID)
 	err = requestconfig.ExecuteNewRequest(ctx, http.MethodPost, path, body, &res, opts...)
 	return res, err
 }
 
-// Create a vector store file batch and polls the API until the task is complete.
-// Pass 0 for pollIntervalMs to enable default polling interval.
-func (r *VectorStoreFileBatchService) NewAndPoll(ctx context.Context, vectorStoreId string, body VectorStoreFileBatchNewParams, pollIntervalMs int, opts ...option.RequestOption) (res *VectorStoreFileBatch, err error) {
-	batch, err := r.New(ctx, vectorStoreId, body, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return r.PollStatus(ctx, vectorStoreId, batch.ID, pollIntervalMs, opts...)
-}
-
-// Uploads the given files concurrently and then creates a vector store file batch.
-//
-// If you've already uploaded certain files that you want to include in this batch
-// then you can pass their IDs through the file_ids argument.
-//
-// Pass 0 for pollIntervalMs to enable default polling interval.
-//
-// By default, if any file upload fails then an exception will be eagerly raised.
-func (r *VectorStoreFileBatchService) UploadAndPoll(ctx context.Context, vectorStoreID string, files []FileNewParams, fileIDs []string, pollIntervalMs int, opts ...option.RequestOption) (*VectorStoreFileBatch, error) {
-	if len(files) <= 0 {
-		return nil, errors.New("No `files` provided to process. If you've already uploaded files you should use `.NewAndPoll()` instead")
-	}
-
-	filesService := NewFileService(r.Options...)
-
-	uploadedFileIDs := make(chan string, len(files))
-	fileUploadErrors := make(chan error, len(files))
-	wg := sync.WaitGroup{}
-
-	for _, file := range files {
-		wg.Add(1)
-		go func(file FileNewParams) {
-			defer wg.Done()
-			fileObj, err := filesService.New(ctx, file, opts...)
-			if err != nil {
-				fileUploadErrors <- err
-				return
-			}
-			uploadedFileIDs <- fileObj.ID
-		}(file)
-	}
-
-	wg.Wait()
-	close(uploadedFileIDs)
-	close(fileUploadErrors)
-
-	for err := range fileUploadErrors {
-		return nil, err
-	}
-
-	for id := range uploadedFileIDs {
-		fileIDs = append(fileIDs, id)
-	}
-
-	return r.NewAndPoll(ctx, vectorStoreID, VectorStoreFileBatchNewParams{
-		FileIDs: fileIDs,
-	}, pollIntervalMs, opts...)
-}
-
 // Retrieves a vector store file batch.
 func (r *VectorStoreFileBatchService) Get(ctx context.Context, vectorStoreID string, batchID string, opts ...option.RequestOption) (res *VectorStoreFileBatch, err error) {
-	opts = slices.Concat(r.Options, opts)
+	var preClientOpts = []option.RequestOption{requestconfig.WithBearerAuthSecurity()}
+	opts = slices.Concat(preClientOpts, r.Options, opts)
 	opts = append([]option.RequestOption{option.WithHeader("OpenAI-Beta", "assistants=v2")}, opts...)
 	if vectorStoreID == "" {
 		err = errors.New("missing required vector_store_id parameter")
@@ -124,7 +71,7 @@ func (r *VectorStoreFileBatchService) Get(ctx context.Context, vectorStoreID str
 		err = errors.New("missing required batch_id parameter")
 		return nil, err
 	}
-	path := fmt.Sprintf("vector_stores/%s/file_batches/%s", vectorStoreID, batchID)
+	path := requestconfig.FormatPath("vector_stores/%s/file_batches/%s", vectorStoreID, batchID)
 	err = requestconfig.ExecuteNewRequest(ctx, http.MethodGet, path, nil, &res, opts...)
 	return res, err
 }
@@ -132,7 +79,8 @@ func (r *VectorStoreFileBatchService) Get(ctx context.Context, vectorStoreID str
 // Cancel a vector store file batch. This attempts to cancel the processing of
 // files in this batch as soon as possible.
 func (r *VectorStoreFileBatchService) Cancel(ctx context.Context, vectorStoreID string, batchID string, opts ...option.RequestOption) (res *VectorStoreFileBatch, err error) {
-	opts = slices.Concat(r.Options, opts)
+	var preClientOpts = []option.RequestOption{requestconfig.WithBearerAuthSecurity()}
+	opts = slices.Concat(preClientOpts, r.Options, opts)
 	opts = append([]option.RequestOption{option.WithHeader("OpenAI-Beta", "assistants=v2")}, opts...)
 	if vectorStoreID == "" {
 		err = errors.New("missing required vector_store_id parameter")
@@ -142,7 +90,7 @@ func (r *VectorStoreFileBatchService) Cancel(ctx context.Context, vectorStoreID 
 		err = errors.New("missing required batch_id parameter")
 		return nil, err
 	}
-	path := fmt.Sprintf("vector_stores/%s/file_batches/%s/cancel", vectorStoreID, batchID)
+	path := requestconfig.FormatPath("vector_stores/%s/file_batches/%s/cancel", vectorStoreID, batchID)
 	err = requestconfig.ExecuteNewRequest(ctx, http.MethodPost, path, nil, &res, opts...)
 	return res, err
 }
@@ -150,7 +98,8 @@ func (r *VectorStoreFileBatchService) Cancel(ctx context.Context, vectorStoreID 
 // Returns a list of vector store files in a batch.
 func (r *VectorStoreFileBatchService) ListFiles(ctx context.Context, vectorStoreID string, batchID string, query VectorStoreFileBatchListFilesParams, opts ...option.RequestOption) (res *pagination.CursorPage[VectorStoreFile], err error) {
 	var raw *http.Response
-	opts = slices.Concat(r.Options, opts)
+	var preClientOpts = []option.RequestOption{requestconfig.WithBearerAuthSecurity()}
+	opts = slices.Concat(preClientOpts, r.Options, opts)
 	opts = append([]option.RequestOption{option.WithHeader("OpenAI-Beta", "assistants=v2"), option.WithResponseInto(&raw)}, opts...)
 	if vectorStoreID == "" {
 		err = errors.New("missing required vector_store_id parameter")
@@ -160,7 +109,7 @@ func (r *VectorStoreFileBatchService) ListFiles(ctx context.Context, vectorStore
 		err = errors.New("missing required batch_id parameter")
 		return nil, err
 	}
-	path := fmt.Sprintf("vector_stores/%s/file_batches/%s/files", vectorStoreID, batchID)
+	path := requestconfig.FormatPath("vector_stores/%s/file_batches/%s/files", vectorStoreID, batchID)
 	cfg, err := requestconfig.NewRequestConfig(ctx, http.MethodGet, path, query, &res, opts...)
 	if err != nil {
 		return nil, err
@@ -184,18 +133,18 @@ type VectorStoreFileBatch struct {
 	ID string `json:"id" api:"required"`
 	// The Unix timestamp (in seconds) for when the vector store files batch was
 	// created.
-	CreatedAt  int64                          `json:"created_at" api:"required"`
+	CreatedAt  int64                          `json:"created_at" api:"required" format:"unixtime"`
 	FileCounts VectorStoreFileBatchFileCounts `json:"file_counts" api:"required"`
 	// The object type, which is always `vector_store.file_batch`.
-	Object constant.VectorStoreFilesBatch `json:"object" api:"required"`
+	Object constant.VectorStoreFilesBatch `json:"object" default:"vector_store.files_batch"`
 	// The status of the vector store files batch, which can be either `in_progress`,
 	// `completed`, `cancelled` or `failed`.
 	//
 	// Any of "in_progress", "completed", "cancelled", "failed".
 	Status VectorStoreFileBatchStatus `json:"status" api:"required"`
 	// The ID of the
-	// [vector store](https://platform.openai.com/docs/api-reference/vector-stores/object)
-	// that the [File](https://platform.openai.com/docs/api-reference/files) is
+	// [vector store](https://developers.openai.com/api/reference/resources/vector_stores)
+	// that the [File](https://developers.openai.com/api/reference/resources/files) is
 	// attached to.
 	VectorStoreID string `json:"vector_store_id" api:"required"`
 	// JSON contains metadata for fields, check presence with [respjson.Field.Valid].
@@ -267,17 +216,19 @@ type VectorStoreFileBatchNewParams struct {
 	// The chunking strategy used to chunk the file(s). If not set, will use the `auto`
 	// strategy. Only applicable if `file_ids` is non-empty.
 	ChunkingStrategy FileChunkingStrategyParamUnion `json:"chunking_strategy,omitzero"`
-	// A list of [File](https://platform.openai.com/docs/api-reference/files) IDs that
-	// the vector store should use. Useful for tools like `file_search` that can access
-	// files. If `attributes` or `chunking_strategy` are provided, they will be applied
-	// to all files in the batch. The maximum batch size is 2000 files. Mutually
-	// exclusive with `files`.
+	// A list of [File](https://developers.openai.com/api/reference/resources/files)
+	// IDs that the vector store should use. Useful for tools like `file_search` that
+	// can access files. If `attributes` or `chunking_strategy` are provided, they will
+	// be applied to all files in the batch. The maximum batch size is 2000 files. This
+	// endpoint is recommended for multi-file ingestion and helps reduce
+	// per-vector-store write request pressure. Mutually exclusive with `files`.
 	FileIDs []string `json:"file_ids,omitzero"`
 	// A list of objects that each include a `file_id` plus optional `attributes` or
 	// `chunking_strategy`. Use this when you need to override metadata for specific
 	// files. The global `attributes` or `chunking_strategy` will be ignored and must
-	// be specified for each file. The maximum batch size is 2000 files. Mutually
-	// exclusive with `file_ids`.
+	// be specified for each file. The maximum batch size is 2000 files. This endpoint
+	// is recommended for multi-file ingestion and helps reduce per-vector-store write
+	// request pressure. Mutually exclusive with `file_ids`.
 	Files []VectorStoreFileBatchNewParamsFile `json:"files,omitzero"`
 	paramObj
 }
@@ -307,22 +258,13 @@ func (u *VectorStoreFileBatchNewParamsAttributeUnion) UnmarshalJSON(data []byte)
 	return apijson.UnmarshalRoot(data, u)
 }
 
-func (u *VectorStoreFileBatchNewParamsAttributeUnion) asAny() any {
-	if !param.IsOmitted(u.OfString) {
-		return &u.OfString.Value
-	} else if !param.IsOmitted(u.OfFloat) {
-		return &u.OfFloat.Value
-	} else if !param.IsOmitted(u.OfBool) {
-		return &u.OfBool.Value
-	}
-	return nil
-}
-
 // The property FileID is required.
 type VectorStoreFileBatchNewParamsFile struct {
-	// A [File](https://platform.openai.com/docs/api-reference/files) ID that the
-	// vector store should use. Useful for tools like `file_search` that can access
-	// files.
+	// A [File](https://developers.openai.com/api/reference/resources/files) ID that
+	// the vector store should use. Useful for tools like `file_search` that can access
+	// files. For multi-file ingestion, we recommend
+	// [`file_batches`](https://developers.openai.com/api/reference/resources/vector_stores/subresources/file_batches/methods/create)
+	// to minimize per-vector-store write requests.
 	FileID string `json:"file_id" api:"required"`
 	// Set of 16 key-value pairs that can be attached to an object. This can be useful
 	// for storing additional information about the object in a structured format, and
@@ -359,17 +301,6 @@ func (u VectorStoreFileBatchNewParamsFileAttributeUnion) MarshalJSON() ([]byte, 
 }
 func (u *VectorStoreFileBatchNewParamsFileAttributeUnion) UnmarshalJSON(data []byte) error {
 	return apijson.UnmarshalRoot(data, u)
-}
-
-func (u *VectorStoreFileBatchNewParamsFileAttributeUnion) asAny() any {
-	if !param.IsOmitted(u.OfString) {
-		return &u.OfString.Value
-	} else if !param.IsOmitted(u.OfFloat) {
-		return &u.OfFloat.Value
-	} else if !param.IsOmitted(u.OfBool) {
-		return &u.OfBool.Value
-	}
-	return nil
 }
 
 type VectorStoreFileBatchListFilesParams struct {
