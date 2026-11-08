@@ -14,6 +14,7 @@ import (
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/huh/spinner"
 	"github.com/charmbracelet/x/term"
+	"github.com/kapitanov/gptbot/internal/beep"
 	"github.com/kapitanov/gptbot/internal/llmprovider"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
@@ -112,16 +113,27 @@ func runSpinner(ctx context.Context, action func()) {
 }
 
 func printBotChatMessage(response llmprovider.Response) {
+	text := ""
+	if response.Reasoning != "" {
+		for line := range strings.Lines(response.Reasoning) {
+			text += "> " + line
+		}
+		text += "\n"
+	}
+	text += response.Text
+
 	width, _, _ := term.GetSize(os.Stdout.Fd())
 	r, _ := glamour.NewTermRenderer(
 		glamour.WithStylePath(styles.DraculaStyle),
 		glamour.WithWordWrap(width),
 	)
-	out, _ := r.RenderBytes([]byte(response.Text))
+	out, _ := r.RenderBytes([]byte(text))
 
 	_, _ = lipgloss.Println(string(out))
 	_, _ = lipgloss.Println(faintStyle.Render(
 		fmt.Sprintf("%d tokens ⋅ model %s ⋅ duration %s", response.Usage.TotalTokens, response.Model, response.Duration),
 	))
 	_, _ = lipgloss.Println()
+
+	beep.Beep()
 }
