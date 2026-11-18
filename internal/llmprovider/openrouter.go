@@ -16,6 +16,24 @@ import (
 // openRouterDefaultURL is the default OpenRouter API URL.
 const openRouterDefaultURL = "https://openrouter.ai/api/v1"
 
+// openRouterServerTools is the list of OpenRouter built-in server side tools
+// (executed by OpenRouter, no client-side implementation needed).
+var openRouterServerTools = []string{
+	"openrouter:web_search", // Search the web for current information.
+	"openrouter:web_fetch",  // Fetch and extract content from URLs.
+	"openrouter:datetime",   // Get the current date and time.
+}
+
+// openRouterServerToolsOption returns a request option that enables
+// the OpenRouter built-in server side tools on a request.
+func openRouterServerToolsOption() option.RequestOption {
+	tools := make([]map[string]string, 0, len(openRouterServerTools))
+	for _, t := range openRouterServerTools {
+		tools = append(tools, map[string]string{"type": t})
+	}
+	return option.WithJSONSet("tools", tools)
+}
+
 // openRouterProvider is a LLM provider backed by the OpenRouter API (Chat Completions API).
 type openRouterProvider struct {
 	client          openai.Client
@@ -73,7 +91,7 @@ func (p *openRouterProvider) Generate(ctx context.Context, req Request) (Respons
 	}
 
 	started := time.Now()
-	response, err := p.client.Chat.Completions.New(ctx, request)
+	response, err := p.client.Chat.Completions.New(ctx, request, openRouterServerToolsOption())
 	if err != nil {
 		return Response{}, err
 	}
@@ -92,6 +110,8 @@ func (p *openRouterProvider) Generate(ctx context.Context, req Request) (Respons
 		ReasoningEffort: p.reasoningEffort,
 		TotalPrice:      completionCost(response),
 		Duration:        time.Since(started),
+		ServerToolUsage: completionServerToolUsage(response),
+		Citations:       completionCitations(response),
 	}
 
 	if err = p.updateHistory(req, r); err != nil {
@@ -108,6 +128,21 @@ func (p *openRouterProvider) Generate(ctx context.Context, req Request) (Respons
 		Float64("price", r.TotalPrice).
 		Dur("duration", r.Duration).
 		Msg("llm stats")
+
+	// Server tools run inside OpenRouter's agent loop, so search queries are not
+	// reported back. Infer what was searched from the returned web citations.
+	if len(r.Citations) > 0 || r.ServerToolUsage.WebSearchRequests > 0 {
+		citations := make([]string, 0, len(r.Citations))
+		for _, c := range r.Citations {
+			citations = append(citations, c.URL)
+		}
+
+		log.Info().
+			Int("web_searches", r.ServerToolUsage.WebSearchRequests).
+			Int("tool_calls", r.ServerToolUsage.ToolCallsExecuted).
+			Strs("citations", citations).
+			Msg("server tool usage")
+	}
 
 	return r, nil
 }
@@ -204,6 +239,71 @@ func completionCost(response *openai.ChatCompletion) float64 {
 	}
 
 	return raw.Usage.Cost
+}
+
+// completionServerToolUsage extracts server side tool usage counters from the OpenRouter response.
+// OpenRouter returns them in a non-standard "server_tool_use_details" field of the usage object.
+func completionServerToolUsage(response *openai.ChatCompletion) ServerToolUsage {
+	var raw struct {
+		Usage struct {
+			Details struct {
+				ToolCallsRequested int `json:"tool_calls_requested"`
+				ToolCallsExecuted  int `json:"tool_calls_executed"`
+				WebSearchRequests  int `json:"web_search_requests"`
+			} `json:"server_tool_use_details"`
+		} `json:"usage"`
+	}
+
+	if err := json.Unmarshal([]byte(response.RawJSON()), &raw); err != nil {
+		return ServerToolUsage{}
+	}
+
+	return ServerToolUsage{
+		ToolCallsRequested: raw.Usage.Details.ToolCallsRequested,
+		ToolCallsExecuted:  raw.Usage.Details.ToolCallsExecuted,
+		WebSearchRequests:  raw.Usage.Details.WebSearchRequests,
+	}
+}
+
+// completionCitations extracts web citations from the OpenRouter response.
+// OpenRouter standardizes results of its server side web search/fetch tools into
+// "url_citation" annotations of the message.
+func completionCitations(response *openai.ChatCompletion) []Citation {
+	var raw struct {
+		Choices []struct {
+			Message struct {
+				Annotations []struct {
+					Type        string `json:"type"`
+					URLCitation struct {
+						URL     string `json:"url"`
+						Title   string `json:"title"`
+						Content string `json:"content"`
+					} `json:"url_citation"`
+				} `json:"annotations"`
+			} `json:"message"`
+		} `json:"choices"`
+	}
+
+	if err := json.Unmarshal([]byte(response.RawJSON()), &raw); err != nil {
+		return nil
+	}
+	if len(raw.Choices) == 0 {
+		return nil
+	}
+
+	var citations []Citation
+	for _, a := range raw.Choices[0].Message.Annotations {
+		if a.Type != "url_citation" || a.URLCitation.URL == "" {
+			continue
+		}
+		citations = append(citations, Citation{
+			URL:     a.URLCitation.URL,
+			Title:   a.URLCitation.Title,
+			Content: a.URLCitation.Content,
+		})
+	}
+
+	return citations
 }
 
 func completionText(response *openai.ChatCompletion) string {

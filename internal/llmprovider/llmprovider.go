@@ -101,6 +101,27 @@ type Response struct {
 	ReasoningEffort ReasoningEffort // Reasoning effort used.
 	TotalPrice      float64         // Total price in USD, when reported by the provider.
 	Duration        time.Duration   // Duration of the response.
+
+	// ServerToolUsage holds server side tool usage counters, when reported by the provider.
+	ServerToolUsage ServerToolUsage
+
+	// Citations holds web citations produced by server side web search/fetch tools,
+	// when reported by the provider.
+	Citations []Citation
+}
+
+// ServerToolUsage holds server side tool usage counters.
+type ServerToolUsage struct {
+	ToolCallsRequested int // Total server tool calls requested by the model.
+	ToolCallsExecuted  int // Server tool calls executed.
+	WebSearchRequests  int // Web search queries performed.
+}
+
+// Citation is a web citation produced by a server side web search/fetch tool.
+type Citation struct {
+	URL     string // Cited URL.
+	Title   string // Title of the cited page.
+	Content string // Content excerpt of the cited page.
 }
 
 // New creates a new LLM provider client.
