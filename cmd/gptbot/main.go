@@ -72,7 +72,7 @@ func withLLMProvider(cmd *cobra.Command) func(history llmprovider.History) (llmp
 			llmProvider = os.Getenv("LLM_PROVIDER")
 		}
 		if llmProvider == "" {
-			llmProvider = llmprovider.DefaultProvider
+			llmProvider = string(llmprovider.DefaultProvider)
 		}
 
 		if llmURL == "" {
@@ -98,19 +98,19 @@ func withLLMProvider(cmd *cobra.Command) func(history llmprovider.History) (llmp
 			llmReasoningEffort = os.Getenv("GPTBOT_LLM_REASONING")
 
 			if llmReasoningEffort == "" {
-				llmReasoningEffort = llmprovider.DefaultReasoningEffort
+				llmReasoningEffort = string(llmprovider.DefaultReasoningEffort)
 			}
 		}
 
 		llm, err := llmprovider.New(llmprovider.Parameters{
-			Provider:        llmProvider,
+			Provider:        llmprovider.ProviderType(llmProvider),
 			URL:             llmURL,
 			Token:           llmToken,
 			Model:           llmModel,
 			PromptFilePath:  llmPromptFilePath,
 			History:         history,
 			EnableTracing:   os.Getenv("GPTBOT_LLM_TRACE") != "",
-			ReasoningEffort: llmReasoningEffort,
+			ReasoningEffort: llmprovider.ReasoningEffort(llmReasoningEffort),
 		})
 		if err != nil {
 			return nil, err

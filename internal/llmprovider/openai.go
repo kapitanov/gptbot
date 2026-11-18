@@ -23,13 +23,13 @@ type openAIProvider struct {
 	promptFilePath  string
 	history         History
 	enableTracing   bool
-	reasoningEffort shared.ReasoningEffort
+	reasoningEffort ReasoningEffort
 }
 
 // newOpenAIProvider creates a new OpenAI LLM provider client.
 func newOpenAIProvider(parameters Parameters) (*openAIProvider, error) {
 	var clientOptions []option.RequestOption
-	logEvent := log.Info().Str("provider", ProviderOpenAI)
+	logEvent := log.Info().Str("provider", string(ProviderOpenAI))
 
 	if parameters.URL != "" {
 		logEvent = logEvent.Str("url", parameters.URL)
@@ -46,7 +46,7 @@ func newOpenAIProvider(parameters Parameters) (*openAIProvider, error) {
 	logEvent.
 		Str("model", parameters.Model).
 		Str("prompt", parameters.PromptFilePath).
-		Str("reasoning", parameters.ReasoningEffort).
+		Str("reasoning", string(parameters.ReasoningEffort)).
 		Msg("llm client configuration")
 
 	_, err := client.Models.List(context.Background())
@@ -60,7 +60,7 @@ func newOpenAIProvider(parameters Parameters) (*openAIProvider, error) {
 		promptFilePath:  parameters.PromptFilePath,
 		history:         parameters.History,
 		enableTracing:   parameters.EnableTracing,
-		reasoningEffort: shared.ReasoningEffort(parameters.ReasoningEffort),
+		reasoningEffort: ReasoningEffort(parameters.ReasoningEffort),
 	}, nil
 }
 
@@ -87,7 +87,7 @@ func (llm *openAIProvider) Generate(ctx context.Context, req Request) (Response,
 		},
 		Model:           response.Model,
 		TotalTokens:     response.Usage.TotalTokens,
-		ReasoningEffort: string(llm.reasoningEffort),
+		ReasoningEffort: llm.reasoningEffort,
 		Duration:        time.Second * time.Duration(response.CompletedAt-response.CreatedAt),
 	}
 
@@ -101,7 +101,7 @@ func (llm *openAIProvider) Generate(ctx context.Context, req Request) (Response,
 		Str("id", r.ID).
 		Str("model", r.Model).
 		Int64("tokens", r.TotalTokens).
-		Str("reasoning", r.ReasoningEffort).
+		Str("reasoning", string(r.ReasoningEffort)).
 		Dur("duration", r.Duration).
 		Msg("llm stats")
 
@@ -132,7 +132,7 @@ func (llm *openAIProvider) prepareRequest(request Request) (responses.ResponseNe
 			OfInputItemList: itemsList,
 		},
 		Reasoning: shared.ReasoningParam{
-			Effort: llm.reasoningEffort,
+			Effort: shared.ReasoningEffort(llm.reasoningEffort),
 		},
 	}
 

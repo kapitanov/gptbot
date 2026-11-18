@@ -13,20 +13,25 @@ import (
 	"time"
 )
 
-// Provider names.
+// ProviderType is a LLM provider type name.
+type ProviderType string
+
 const (
 	// ProviderOpenAI is the OpenAI provider name.
-	ProviderOpenAI = "openai"
+	ProviderOpenAI ProviderType = "openai"
 
 	// ProviderOpenRouter is the OpenRouter provider name.
-	ProviderOpenRouter = "openrouter"
+	ProviderOpenRouter ProviderType = "openrouter"
 )
 
 // DefaultProvider is the default LLM provider name.
 const DefaultProvider = ProviderOpenAI
 
+// ReasoningEffort is a reasoning effort level.
+type ReasoningEffort string
+
 // DefaultReasoningEffort is the default reasoning effort.
-const DefaultReasoningEffort = "minimal"
+const DefaultReasoningEffort ReasoningEffort = "minimal"
 
 // MaxConversationDepth limits conversation depth.
 const MaxConversationDepth = 5
@@ -39,14 +44,14 @@ type Provider interface {
 
 // Parameters holds the configuration for the LLM client.
 type Parameters struct {
-	Provider        string  // Provider name ("openai" or "openrouter").
-	URL             string  // Provider API URL.
-	Token           string  // Provider API token.
-	Model           string  // Model name.
-	PromptFilePath  string  // System prompt file path.
-	History         History // Conversation history storage.
-	EnableTracing   bool    // Enable request/response tracing.
-	ReasoningEffort string  // Reasoning effort.
+	Provider        ProviderType    // Provider type ("openai" or "openrouter").
+	URL             string          // Provider API URL.
+	Token           string          // Provider API token.
+	Model           string          // Model name.
+	PromptFilePath  string          // System prompt file path.
+	History         History         // Conversation history storage.
+	EnableTracing   bool            // Enable request/response tracing.
+	ReasoningEffort ReasoningEffort // Reasoning effort.
 }
 
 // History represents the conversation history storage.
@@ -87,14 +92,15 @@ type Usage struct {
 
 // Response is a GPT response.
 type Response struct {
-	ID              string        // Response ID.
-	Text            string        // Transformed text.
-	Reasoning       string        // Reasoning output.
-	Usage           Usage         // Token usage.
-	TotalTokens     int64         // Total number of tokens used.
-	Model           string        // Model name.
-	ReasoningEffort string        // Reasoning effort used.
-	Duration        time.Duration // Duration of the response.
+	ID              string          // Response ID.
+	Text            string          // Transformed text.
+	Reasoning       string          // Reasoning output.
+	Usage           Usage           // Token usage.
+	TotalTokens     int64           // Total number of tokens used.
+	Model           string          // Model name.
+	ReasoningEffort ReasoningEffort // Reasoning effort used.
+	TotalPrice      float64         // Total price in USD, when reported by the provider.
+	Duration        time.Duration   // Duration of the response.
 }
 
 // New creates a new LLM provider client.

@@ -130,9 +130,12 @@ func printBotChatMessage(response llmprovider.Response) {
 	out, _ := r.RenderBytes([]byte(text))
 
 	_, _ = lipgloss.Println(string(out))
-	_, _ = lipgloss.Println(faintStyle.Render(
-		fmt.Sprintf("%d tokens ⋅ model %s ⋅ duration %s", response.Usage.TotalTokens, response.Model, response.Duration),
-	))
+	stats := fmt.Sprintf("%d tokens ⋅ model %s ⋅ duration %s",
+		response.Usage.TotalTokens, response.Model, response.Duration)
+	if response.TotalPrice > 0 {
+		stats += fmt.Sprintf(" ⋅ price $%.4f", response.TotalPrice)
+	}
+	_, _ = lipgloss.Println(faintStyle.Render(stats))
 	_, _ = lipgloss.Println()
 
 	beep.Beep()

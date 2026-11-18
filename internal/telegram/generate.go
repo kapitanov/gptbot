@@ -85,11 +85,12 @@ func (tg *Telegram) generateE(msg *telebot.Message, request string) error {
 	}
 
 	markdown = fmt.Sprintf(
-		"%s\n\n<sub>model %s, reasoning %s, %s tokens, generated in %.2fs, %.1f tokens/sec</sub>",
+		"%s\n\n<sub>model %s, reasoning %s, %s tokens%s, generated in %.2fs, %.1f tokens/sec</sub>",
 		markdown,
 		response.Model,
 		string(response.ReasoningEffort),
 		prettyTokens(response.Usage.TotalTokens),
+		prettyPrice(response.TotalPrice),
 		response.Duration.Seconds(),
 		float64(response.Usage.TotalTokens)/response.Duration.Seconds(),
 	)
@@ -136,6 +137,13 @@ func prettyTokens(tokens int64) string {
 		return fmt.Sprintf("%d", tokens)
 	}
 	return fmt.Sprintf("%.1fk", float64(tokens)/1000)
+}
+
+func prettyPrice(price float64) string {
+	if price <= 0 {
+		return ""
+	}
+	return fmt.Sprintf(", $%.4f", price)
 }
 
 func (tg *Telegram) withThinkingMsg(msg *telebot.Message) func() {

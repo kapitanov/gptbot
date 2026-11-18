@@ -23,7 +23,7 @@ type openRouterProvider struct {
 	promptFilePath  string
 	history         History
 	enableTracing   bool
-	reasoningEffort string
+	reasoningEffort ReasoningEffort
 }
 
 // newOpenRouterProvider creates a new OpenRouter LLM provider client.
@@ -43,11 +43,11 @@ func newOpenRouterProvider(parameters Parameters) (*openRouterProvider, error) {
 	client := openai.NewClient(clientOptions...)
 
 	log.Info().
-		Str("provider", ProviderOpenRouter).
+		Str("provider", string(ProviderOpenRouter)).
 		Str("url", url).
 		Str("model", parameters.Model).
 		Str("prompt", parameters.PromptFilePath).
-		Str("reasoning", parameters.ReasoningEffort).
+		Str("reasoning", string(parameters.ReasoningEffort)).
 		Msg("llm client configuration")
 
 	_, err := client.Models.List(context.Background())
@@ -90,6 +90,7 @@ func (p *openRouterProvider) Generate(ctx context.Context, req Request) (Respons
 		Model:           response.Model,
 		TotalTokens:     response.Usage.TotalTokens,
 		ReasoningEffort: p.reasoningEffort,
+		TotalPrice:      completionCost(response),
 		Duration:        time.Since(started),
 	}
 
@@ -103,7 +104,8 @@ func (p *openRouterProvider) Generate(ctx context.Context, req Request) (Respons
 		Str("id", r.ID).
 		Str("model", r.Model).
 		Int64("tokens", r.TotalTokens).
-		Str("reasoning", r.ReasoningEffort).
+		Str("reasoning", string(r.ReasoningEffort)).
+		Float64("price", r.TotalPrice).
 		Dur("duration", r.Duration).
 		Msg("llm stats")
 
@@ -186,6 +188,22 @@ func completionReasoning(response *openai.ChatCompletion) string {
 	}
 
 	return raw.Choices[0].Message.Reasoning
+}
+
+// completionCost extracts the total cost in USD from the OpenRouter response.
+// OpenRouter returns it in a non-standard "cost" field of the usage object.
+func completionCost(response *openai.ChatCompletion) float64 {
+	var raw struct {
+		Usage struct {
+			Cost float64 `json:"cost"`
+		} `json:"usage"`
+	}
+
+	if err := json.Unmarshal([]byte(response.RawJSON()), &raw); err != nil {
+		return 0
+	}
+
+	return raw.Usage.Cost
 }
 
 func completionText(response *openai.ChatCompletion) string {
