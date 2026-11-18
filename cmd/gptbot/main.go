@@ -55,20 +55,28 @@ func main() {
 	}
 }
 
-func withLLMProvider(cmd *cobra.Command) func(history llmprovider.History) (*llmprovider.LLM, error) {
-	var llmURL, llmToken, llmModel, llmPromptFilePath, llmReasoningEffort string
-	cmd.Flags().StringVar(&llmURL, "llm-url", "", "LLM provider URL (default from $GPTBOT_LLM_URL, or \"https://api.openai.com/v1/\")")
+func withLLMProvider(cmd *cobra.Command) func(history llmprovider.History) (llmprovider.Provider, error) {
+	var llmProvider, llmURL, llmToken, llmModel, llmPromptFilePath, llmReasoningEffort string
+	cmd.Flags().StringVar(&llmProvider, "llm-provider", "", "LLM provider name: \"openai\" or \"openrouter\" (default from $GPTBOT_LLM_PROVIDER or $LLM_PROVIDER, or \"openai\")")
+	cmd.Flags().StringVar(&llmURL, "llm-url", "", "LLM provider URL (default from $GPTBOT_LLM_URL, or \"https://api.openai.com/v1/\" for OpenAI and \"https://openrouter.ai/api/v1\" for OpenRouter)")
 	cmd.Flags().StringVar(&llmToken, "llm-token", "", "LLM provider token (default from $GPTBOT_LLM_TOKEN)")
 	cmd.Flags().StringVar(&llmModel, "llm-model", "", "LLM model (default from $GPTBOT_LLM_MODEL)")
 	cmd.Flags().StringVar(&llmPromptFilePath, "llm-prompt", "", "LLM prompt file path (default from $GPTBOT_LLM_PROMPT)")
 	cmd.Flags().StringVar(&llmReasoningEffort, "llm-reasoning", "", "LLM reasoning effort (default from $GPTBOT_LLM_REASONING)")
 
-	return func(history llmprovider.History) (*llmprovider.LLM, error) {
+	return func(history llmprovider.History) (llmprovider.Provider, error) {
+		if llmProvider == "" {
+			llmProvider = os.Getenv("GPTBOT_LLM_PROVIDER")
+		}
+		if llmProvider == "" {
+			llmProvider = os.Getenv("LLM_PROVIDER")
+		}
+		if llmProvider == "" {
+			llmProvider = llmprovider.DefaultProvider
+		}
+
 		if llmURL == "" {
 			llmURL = os.Getenv("GPTBOT_LLM_URL")
-			if llmURL == "" {
-				return nil, errors.New("llm url is required")
-			}
 		}
 		if llmToken == "" {
 			llmToken = os.Getenv("GPTBOT_LLM_TOKEN")
@@ -95,6 +103,7 @@ func withLLMProvider(cmd *cobra.Command) func(history llmprovider.History) (*llm
 		}
 
 		llm, err := llmprovider.New(llmprovider.Parameters{
+			Provider:        llmProvider,
 			URL:             llmURL,
 			Token:           llmToken,
 			Model:           llmModel,
@@ -141,11 +150,11 @@ func withAccessProvider(cmd *cobra.Command) func() (*access.Provider, error) {
 	}
 }
 
-func withTelegramBot(cmd *cobra.Command) func(s *storage.Storage, llm *llmprovider.LLM, p *access.Provider) (*telegram.Telegram, error) {
+func withTelegramBot(cmd *cobra.Command) func(s *storage.Storage, llm llmprovider.Provider, p *access.Provider) (*telegram.Telegram, error) {
 	var tgToken string
 	cmd.Flags().StringVar(&tgToken, "tg-token", "", "Telegram bot token (default from $TELEGRAM_BOT_TOKEN)")
 
-	return func(s *storage.Storage, llm *llmprovider.LLM, p *access.Provider) (*telegram.Telegram, error) {
+	return func(s *storage.Storage, llm llmprovider.Provider, p *access.Provider) (*telegram.Telegram, error) {
 		if tgToken == "" {
 			tgToken = os.Getenv("TELEGRAM_BOT_TOKEN")
 			if tgToken == "" {

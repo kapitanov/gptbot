@@ -17,18 +17,18 @@ import (
 type Telegram struct {
 	bot                   *telebot.Bot
 	storage               *storage.Storage
-	llm                   *llmprovider.LLM
+	llm                   llmprovider.Provider
 	accessChecker         AccessChecker
 	enableReasoningOutput bool
 }
 
 // Options is a telegram bot options.
 type Options struct {
-	Token                 string           // Telegram bot token.
-	LLM                   *llmprovider.LLM // LLM client.
-	AccessChecker         AccessChecker    // Access checker.
-	Storage               *storage.Storage // Storage.
-	EnableReasoningOutput bool             // Enable reasoning output from LLM.
+	Token                 string               // Telegram bot token.
+	LLM                   llmprovider.Provider // LLM client.
+	AccessChecker         AccessChecker        // Access checker.
+	Storage               *storage.Storage     // Storage.
+	EnableReasoningOutput bool                 // Enable reasoning output from LLM.
 }
 
 // AccessChecker checks access to telegram chats.
