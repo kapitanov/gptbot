@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -19,7 +20,7 @@ import (
 // openAIProvider is a LLM provider backed by the OpenAI API (Responses API).
 type openAIProvider struct {
 	client          openai.Client
-	model           string
+	models          []string
 	promptFilePath  string
 	history         History
 	enableTracing   bool
@@ -42,9 +43,10 @@ func newOpenAIProvider(parameters Parameters) (*openAIProvider, error) {
 	}
 
 	client := openai.NewClient(clientOptions...)
+	models := ParseModels(parameters.Model)
 
 	logEvent.
-		Str("model", parameters.Model).
+		Strs("models", models).
 		Str("prompt", parameters.PromptFilePath).
 		Str("reasoning", string(parameters.ReasoningEffort)).
 		Msg("llm client configuration")
@@ -56,12 +58,22 @@ func newOpenAIProvider(parameters Parameters) (*openAIProvider, error) {
 
 	return &openAIProvider{
 		client:          client,
-		model:           parameters.Model,
+		models:          models,
 		promptFilePath:  parameters.PromptFilePath,
 		history:         parameters.History,
 		enableTracing:   parameters.EnableTracing,
 		reasoningEffort: ReasoningEffort(parameters.ReasoningEffort),
 	}, nil
+}
+
+// Models returns the list of available model names.
+func (llm *openAIProvider) Models() []string {
+	return slices.Clone(llm.models)
+}
+
+// DefaultModel returns the model name used when the request does not specify one.
+func (llm *openAIProvider) DefaultModel() string {
+	return llm.models[0]
 }
 
 // Generate generates a new message from the input request.
@@ -126,8 +138,13 @@ func (llm *openAIProvider) prepareRequest(request Request) (responses.ResponseNe
 		return responses.ResponseNewParams{}, err
 	}
 
+	model := request.Model
+	if model == "" {
+		model = llm.DefaultModel()
+	}
+
 	req := responses.ResponseNewParams{
-		Model: shared.ResponsesModel(llm.model),
+		Model: shared.ResponsesModel(model),
 		Input: responses.ResponseNewParamsInputUnion{
 			OfInputItemList: itemsList,
 		},

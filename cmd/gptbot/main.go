@@ -60,7 +60,7 @@ func withLLMProvider(cmd *cobra.Command) func(history llmprovider.History) (llmp
 	cmd.Flags().StringVar(&llmProvider, "llm-provider", "", "LLM provider name: \"openai\" or \"openrouter\" (default from $GPTBOT_LLM_PROVIDER or $LLM_PROVIDER, or \"openai\")")
 	cmd.Flags().StringVar(&llmURL, "llm-url", "", "LLM provider URL (default from $GPTBOT_LLM_URL, or \"https://api.openai.com/v1/\" for OpenAI and \"https://openrouter.ai/api/v1\" for OpenRouter)")
 	cmd.Flags().StringVar(&llmToken, "llm-token", "", "LLM provider token (default from $GPTBOT_LLM_TOKEN)")
-	cmd.Flags().StringVar(&llmModel, "llm-model", "", "LLM model (default from $GPTBOT_LLM_MODEL)")
+	cmd.Flags().StringVar(&llmModel, "llm-model", "", "Comma-separated list of LLM models; the first one is the default (default from $GPTBOT_LLM_MODEL)")
 	cmd.Flags().StringVar(&llmPromptFilePath, "llm-prompt", "", "LLM prompt file path (default from $GPTBOT_LLM_PROMPT)")
 	cmd.Flags().StringVar(&llmReasoningEffort, "llm-reasoning", "", "LLM reasoning effort (default from $GPTBOT_LLM_REASONING)")
 

@@ -61,6 +61,7 @@ func New(options Options) (*Telegram, error) {
 
 	tg.bot.SetCommands([]telebot.Command{
 		{Text: "clear", Description: "Clear the conversation"},
+		{Text: "model", Description: "Select the model for the conversation"},
 	})
 
 	return tg, nil

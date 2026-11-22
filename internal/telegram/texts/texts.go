@@ -15,3 +15,9 @@ const Thinking = "Ща прочитаю и отпишусь"
 const Failure = "Простите, что-то пошло не так. Я не смог :("
 
 const AccessDenied = "Этот бот доступен только для определенных пользователей."
+
+const ModelsTitle = "Текущая модель: %s\nВыбери модель:"
+
+const ModelSelected = "Ок, теперь работаю на модели %s"
+
+const UnknownModel = "Такой модели нет: %s"

@@ -22,7 +22,7 @@ This bot is non-public, so you'll need to set up your own instance of this bot t
    GPTBOT_LLM_PROVIDER=openai
    GPTBOT_LLM_URL=<place your LLM URL here>
    GPTBOT_LLM_TOKEN=<place your LLM token here>
-   GPTBOT_LLM_MODEL=z-ai/glm-5.3
+   GPTBOT_LLM_MODEL=z-ai/glm-5.3,nousresearch/hermes-4-405b
    GPTBOT_LLM_PROMPT=./var/PROMPT.md
    GPTBOT_STORAGE_DIR=./var/data/
    GPTBOT_LLM_REASONING=medium
@@ -51,10 +51,18 @@ This bot is configured via env variables:
 | `GPTBOT_LLM_PROVIDER`  | `openai`     | LLM provider: `openai` or `openrouter` (also readable from `LLM_PROVIDER`)                                      |
 | `GPTBOT_LLM_URL`       | Per provider | URL of the LLM service (`https://api.openai.com/v1/` for OpenAI, `https://openrouter.ai/api/v1` for OpenRouter) |
 | `GPTBOT_LLM_TOKEN`     | Empty        | Access token for the LLM                                                                                        |
-| `GPTBOT_LLM_MODEL`     | Required     | Model to use for the LLM                                                                                        |
+| `GPTBOT_LLM_MODEL`     | Required     | Comma-separated list of models; the first one is the default                                                     |
 | `GPTBOT_LLM_PROMPT`    | Required     | Path to the prompt file                                                                                         |
 | `GPTBOT_STORAGE_DIR`   | Required     | Path to message history directory                                                                               |
 | `GPTBOT_LLM_REASONING` | `minimal`    | Reasoning effort for the LLM (`none`, `minimal`, `low`, `medium`, `high`, `xhigh`)                              |
+
+## Model selection
+
+`GPTBOT_LLM_MODEL` accepts a comma-separated list of models, and the first one is used by default.
+The model is pinned to each conversation and survives `/clear`.
+
+* `/model` prints the available models as an inline keyboard; press a button to pick one.
+* `/model <name>` selects the model for the conversation (names are case-insensitive).
 
 ## License
 

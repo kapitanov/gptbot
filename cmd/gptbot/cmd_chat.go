@@ -16,6 +16,7 @@ import (
 	"github.com/charmbracelet/x/term"
 	"github.com/kapitanov/gptbot/internal/beep"
 	"github.com/kapitanov/gptbot/internal/llmprovider"
+	"github.com/kapitanov/gptbot/internal/storage"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 )
@@ -45,6 +46,8 @@ func chatCommand() *cobra.Command {
 
 		conversationID := "local"
 
+		model := resolveChatModel(s, conversationID, g)
+
 		for {
 			line, exit := readUserChatMessage(ctx)
 			if exit {
@@ -57,6 +60,11 @@ func chatCommand() *cobra.Command {
 				return nil
 			}
 
+			if modelName, isModelCommand := parseModelCommand(line); isModelCommand {
+				model = selectChatModel(s, conversationID, g, model, modelName)
+				continue
+			}
+
 			if ctx.Err() != nil {
 				return nil
 			}
@@ -65,7 +73,7 @@ func chatCommand() *cobra.Command {
 
 			var response llmprovider.Response
 			runSpinner(ctx, func() {
-				response, err = g.Generate(ctx, llmprovider.Request{Message: line, ConversationID: conversationID})
+				response, err = g.Generate(ctx, llmprovider.Request{Message: line, ConversationID: conversationID, Model: model})
 			})
 
 			if err != nil {
@@ -88,9 +96,72 @@ var (
 	userMessageStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.BrightCyan)
 )
 
+// parseModelCommand returns the model name argument of a "/model" command
+// and true, or an empty string and false when the line is not a "/model" command.
+func parseModelCommand(line string) (string, bool) {
+	fields := strings.Fields(line)
+	if len(fields) == 0 || fields[0] != "/model" {
+		return "", false
+	}
+
+	return strings.Join(fields[1:], " "), true
+}
+
+// resolveChatModel returns the model pinned to the chat conversation,
+// falling back to the provider's default model when nothing is pinned or the
+// pinned model is no longer configured.
+func resolveChatModel(s *storage.Storage, conversationID string, g llmprovider.Provider) string {
+	pinned, err := s.Model(conversationID)
+	if err != nil {
+		log.Error().Err(err).Msg("failed to load pinned model")
+		return g.DefaultModel()
+	}
+
+	if pinned == "" {
+		return g.DefaultModel()
+	}
+
+	if model, ok := llmprovider.FindModel(g.Models(), pinned); ok {
+		return model
+	}
+
+	log.Warn().Str("model", pinned).Msg("pinned model is not configured anymore, using the default one")
+	return g.DefaultModel()
+}
+
+// selectChatModel handles the "/model" command: it prints the list of models
+// or pins the requested model to the conversation.
+func selectChatModel(s *storage.Storage, conversationID string, g llmprovider.Provider, current, name string) string {
+	if name == "" {
+		_, _ = lipgloss.Println(faintStyle.Render("Current model:"), current)
+		for _, model := range g.Models() {
+			if model == current {
+				_, _ = lipgloss.Println(userMessageStyle.Render("  * " + model))
+			} else {
+				_, _ = lipgloss.Println("    " + model)
+			}
+		}
+		return current
+	}
+
+	model, ok := llmprovider.FindModel(g.Models(), name)
+	if !ok {
+		_, _ = lipgloss.Println(faintStyle.Render(fmt.Sprintf("Unknown model: %s", name)))
+		return current
+	}
+
+	if err := s.SetModel(conversationID, model); err != nil {
+		log.Error().Err(err).Msg("failed to set model")
+		return current
+	}
+
+	_, _ = lipgloss.Println(faintStyle.Render("Model:"), model)
+	return model
+}
+
 func readUserChatMessage(ctx context.Context) (string, bool) {
 	var line string
-	input := huh.NewInput().Title("").Placeholder("(type \"/q\" to quit)").Value(&line)
+	input := huh.NewInput().Title("").Placeholder("(type \"/model\" to pick a model, \"/q\" to quit)").Value(&line)
 
 	group := huh.NewGroup(input)
 	form := huh.NewForm(group).WithShowHelp(false)

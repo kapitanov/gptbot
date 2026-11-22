@@ -70,8 +70,13 @@ func (tg *Telegram) generateE(msg *telebot.Message, request string) error {
 
 	conversationID := getConversationID(msg)
 
+	model, err := tg.modelForConversation(conversationID)
+	if err != nil {
+		return err
+	}
+
 	stopThinking := tg.withThinkingMsg(msg)
-	response, err := tg.llm.Generate(context.Background(), llmprovider.Request{Message: request, ConversationID: conversationID})
+	response, err := tg.llm.Generate(context.Background(), llmprovider.Request{Message: request, ConversationID: conversationID, Model: model})
 	stopThinking()
 
 	if err != nil {

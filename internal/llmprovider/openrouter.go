@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"slices"
 	"time"
 
 	"github.com/openai/openai-go/v3"
@@ -37,7 +38,7 @@ func openRouterServerToolsOption() option.RequestOption {
 // openRouterProvider is a LLM provider backed by the OpenRouter API (Chat Completions API).
 type openRouterProvider struct {
 	client          openai.Client
-	model           string
+	models          []string
 	promptFilePath  string
 	history         History
 	enableTracing   bool
@@ -59,11 +60,12 @@ func newOpenRouterProvider(parameters Parameters) (*openRouterProvider, error) {
 	}
 
 	client := openai.NewClient(clientOptions...)
+	models := ParseModels(parameters.Model)
 
 	log.Info().
 		Str("provider", string(ProviderOpenRouter)).
 		Str("url", url).
-		Str("model", parameters.Model).
+		Strs("models", models).
 		Str("prompt", parameters.PromptFilePath).
 		Str("reasoning", string(parameters.ReasoningEffort)).
 		Msg("llm client configuration")
@@ -75,12 +77,22 @@ func newOpenRouterProvider(parameters Parameters) (*openRouterProvider, error) {
 
 	return &openRouterProvider{
 		client:          client,
-		model:           parameters.Model,
+		models:          models,
 		promptFilePath:  parameters.PromptFilePath,
 		history:         parameters.History,
 		enableTracing:   parameters.EnableTracing,
 		reasoningEffort: parameters.ReasoningEffort,
 	}, nil
+}
+
+// Models returns the list of available model names.
+func (p *openRouterProvider) Models() []string {
+	return slices.Clone(p.models)
+}
+
+// DefaultModel returns the model name used when the request does not specify one.
+func (p *openRouterProvider) DefaultModel() string {
+	return p.models[0]
 }
 
 // Generate generates a new message from the input request.
@@ -153,8 +165,13 @@ func (p *openRouterProvider) prepareRequest(request Request) (openai.ChatComplet
 		return openai.ChatCompletionNewParams{}, err
 	}
 
+	model := request.Model
+	if model == "" {
+		model = p.DefaultModel()
+	}
+
 	return openai.ChatCompletionNewParams{
-		Model:           shared.ChatModel(p.model),
+		Model:           shared.ChatModel(model),
 		Messages:        messages,
 		ReasoningEffort: shared.ReasoningEffort(p.reasoningEffort),
 	}, nil

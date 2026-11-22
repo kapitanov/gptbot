@@ -10,6 +10,7 @@ package llmprovider
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -38,8 +39,49 @@ const MaxConversationDepth = 5
 
 // Provider is a provider-agnostic LLM client.
 type Provider interface {
+	// Models returns the list of available model names.
+	Models() []string
+
+	// DefaultModel returns the model name used when the request does not specify one.
+	DefaultModel() string
+
 	// Generate generates a new message from the input request.
 	Generate(ctx context.Context, req Request) (Response, error)
+}
+
+// ParseModels parses a comma-separated list of model names.
+// Empty and duplicate entries are skipped.
+func ParseModels(s string) []string {
+	var models []string
+	seen := make(map[string]bool)
+
+	for _, m := range strings.Split(s, ",") {
+		m = strings.TrimSpace(m)
+		if m == "" || seen[m] {
+			continue
+		}
+		seen[m] = true
+		models = append(models, m)
+	}
+
+	return models
+}
+
+// FindModel returns the model from the list matching the given name
+// (case-insensitively) and true, or an empty string and false.
+func FindModel(models []string, name string) (string, bool) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return "", false
+	}
+
+	for _, model := range models {
+		if strings.EqualFold(model, name) {
+			return model, true
+		}
+	}
+
+	return "", false
 }
 
 // Parameters holds the configuration for the LLM client.
@@ -47,7 +89,7 @@ type Parameters struct {
 	Provider        ProviderType    // Provider type ("openai" or "openrouter").
 	URL             string          // Provider API URL.
 	Token           string          // Provider API token.
-	Model           string          // Model name.
+	Model           string          // Comma-separated list of model names.
 	PromptFilePath  string          // System prompt file path.
 	History         History         // Conversation history storage.
 	EnableTracing   bool            // Enable request/response tracing.
@@ -79,8 +121,9 @@ const (
 
 // Request is a GPT request.
 type Request struct {
-	Message        string
-	ConversationID string
+	Message        string // Request text.
+	ConversationID string // Conversation ID.
+	Model          string // Model name; when empty, the provider's default model is used.
 }
 
 // Usage is token usage of a request.
@@ -97,7 +140,7 @@ type Response struct {
 	Reasoning       string          // Reasoning output.
 	Usage           Usage           // Token usage.
 	TotalTokens     int64           // Total number of tokens used.
-	Model           string          // Model name.
+	Model           string          // Model name actually used for the response.
 	ReasoningEffort ReasoningEffort // Reasoning effort used.
 	TotalPrice      float64         // Total price in USD, when reported by the provider.
 	Duration        time.Duration   // Duration of the response.
@@ -129,6 +172,10 @@ func New(parameters Parameters) (Provider, error) {
 	name := parameters.Provider
 	if name == "" {
 		name = DefaultProvider
+	}
+
+	if len(ParseModels(parameters.Model)) == 0 {
+		return nil, fmt.Errorf("llm model is required")
 	}
 
 	switch name {

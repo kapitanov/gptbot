@@ -52,9 +52,28 @@ func (s *Storage) Append(conversationID string, messages ...llmprovider.Message)
 }
 
 // Clear removes the conversation history for the given conversation ID.
+// The model pinned to the conversation is preserved.
 func (s *Storage) Clear(conversationID string) error {
 	return s.do(conversationID, func(conversation *conversationJSON, save func() error) error {
 		conversation.Messages = nil
+		return save()
+	})
+}
+
+// Model returns the model pinned to the given conversation, or an empty string if none is pinned.
+func (s *Storage) Model(conversationID string) (string, error) {
+	var model string
+	err := s.do(conversationID, func(conversation *conversationJSON, _ func() error) error {
+		model = conversation.Model
+		return nil
+	})
+	return model, err
+}
+
+// SetModel pins the given model to the conversation.
+func (s *Storage) SetModel(conversationID, model string) error {
+	return s.do(conversationID, func(conversation *conversationJSON, save func() error) error {
+		conversation.Model = model
 		return save()
 	})
 }
@@ -112,7 +131,8 @@ func (s *Storage) store(filePath string, conversation *conversationJSON) error {
 
 // conversationJSON is a JSON model for conversation.
 type conversationJSON struct {
-	Messages []messageJSON `json:"messages"` // Messages in the conversation.
+	Model    string        `json:"model,omitempty"` // Model pinned to the conversation.
+	Messages []messageJSON `json:"messages"`        // Messages in the conversation.
 }
 
 // messageJSON is a JSON model for a message.

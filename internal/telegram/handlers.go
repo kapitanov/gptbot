@@ -1,9 +1,13 @@
 package telegram
 
 import (
+	"fmt"
+	"strings"
+
 	"github.com/rs/zerolog/log"
 	"gopkg.in/telebot.v4"
 
+	"github.com/kapitanov/gptbot/internal/llmprovider"
 	"github.com/kapitanov/gptbot/internal/telegram/texts"
 )
 
@@ -11,6 +15,8 @@ func (tg *Telegram) setupHandlers() {
 	tg.bot.Handle("/start", tg.onStartCommand)
 	tg.bot.Handle("/reset", tg.onResetCommand)
 	tg.bot.Handle("/clear", tg.onResetCommand)
+	tg.bot.Handle("/model", tg.onModelCommand)
+	tg.bot.Handle(&telebot.Btn{Unique: modelCallbackUnique}, tg.onModelCallback)
 	tg.bot.Handle(telebot.OnText, tg.onText)
 	tg.bot.Handle(telebot.OnPhoto, tg.onPhoto)
 	tg.bot.Handle(telebot.OnVideo, tg.onVideo)
@@ -66,6 +72,123 @@ func (tg *Telegram) onText(ctx telebot.Context) error {
 	msg := ctx.Message()
 
 	return tg.generate(msg, msg.Text, "")
+}
+
+func (tg *Telegram) onModelCommand(ctx telebot.Context) error {
+	msg := ctx.Message()
+
+	if !tg.hasAccess(msg) {
+		return nil
+	}
+
+	name := strings.TrimSpace(msg.Payload)
+	if name == "" {
+		return tg.sendModelsList(ctx)
+	}
+
+	model, ok := llmprovider.FindModel(tg.llm.Models(), name)
+	if !ok {
+		_, err := tg.bot.Reply(msg, fmt.Sprintf(texts.UnknownModel, name))
+		if err != nil {
+			log.Error().Err(err).Str("username", msg.Sender.Username).Int("msg", msg.ID).Msg("failed to send unknown model message")
+		}
+		return err
+	}
+
+	return tg.selectModel(ctx, model)
+}
+
+func (tg *Telegram) onModelCallback(ctx telebot.Context) error {
+	cb := ctx.Callback()
+	if cb == nil || cb.Sender == nil || cb.Message == nil {
+		return nil
+	}
+
+	// Present the callback message as a regular message so that access checks
+	// and the conversation ID work the same way as for text messages.
+	msg := cb.Message
+	msg.Sender = cb.Sender
+
+	if !tg.hasAccess(msg) {
+		_ = ctx.Respond()
+		return nil
+	}
+
+	model, ok := llmprovider.FindModel(tg.llm.Models(), cb.Data)
+	if !ok {
+		if err := ctx.RespondAlert(fmt.Sprintf(texts.UnknownModel, cb.Data)); err != nil {
+			log.Error().Err(err).Str("username", cb.Sender.Username).Msg("failed to respond to callback")
+			return err
+		}
+		return nil
+	}
+
+	return tg.selectModel(ctx, model)
+}
+
+// sendModelsList replies with the list of available models as an inline keyboard.
+func (tg *Telegram) sendModelsList(ctx telebot.Context) error {
+	msg := ctx.Message()
+	conversationID := getConversationID(msg)
+
+	current, err := tg.modelForConversation(conversationID)
+	if err != nil {
+		log.Error().Err(err).Str("username", msg.Sender.Username).Str("conversation", conversationID).Msg("failed to load conversation model")
+		return err
+	}
+
+	_, err = tg.bot.Reply(msg, fmt.Sprintf(texts.ModelsTitle, current), tg.modelKeyboard(current))
+	if err != nil {
+		log.Error().Err(err).Str("username", msg.Sender.Username).Int("msg", msg.ID).Msg("failed to send models list")
+	}
+	return err
+}
+
+// selectModel pins the model to the conversation and reports the result.
+func (tg *Telegram) selectModel(ctx telebot.Context, model string) error {
+	msg := ctx.Message()
+	conversationID := getConversationID(msg)
+
+	previous, err := tg.modelForConversation(conversationID)
+	if err != nil {
+		log.Error().Err(err).Str("username", msg.Sender.Username).Str("conversation", conversationID).Msg("failed to load conversation model")
+		return err
+	}
+
+	err = tg.storage.SetModel(conversationID, model)
+	if err != nil {
+		log.Error().Err(err).Str("username", msg.Sender.Username).Str("conversation", conversationID).Msg("failed to set conversation model")
+		return err
+	}
+
+	log.Info().Str("username", msg.Sender.Username).Str("conversation", conversationID).Str("model", model).Msg("conversation model selected")
+
+	selected := fmt.Sprintf(texts.ModelSelected, model)
+
+	if ctx.Callback() == nil {
+		_, err = tg.bot.Reply(msg, selected)
+		if err != nil {
+			log.Error().Err(err).Str("username", msg.Sender.Username).Int("msg", msg.ID).Msg("failed to send model selected message")
+		}
+		return err
+	}
+
+	// Answer the button press with a toast.
+	if err = ctx.RespondText(selected); err != nil {
+		log.Error().Err(err).Str("username", msg.Sender.Username).Msg("failed to respond to callback")
+	}
+
+	// Refresh the list in place, keeping the keyboard for further switching.
+	// Skip the edit when nothing changed to avoid "message is not modified".
+	if previous == model {
+		return nil
+	}
+
+	err = ctx.Edit(fmt.Sprintf(texts.ModelsTitle, model), tg.modelKeyboard(model))
+	if err != nil {
+		log.Error().Err(err).Str("username", msg.Sender.Username).Msg("failed to edit models list")
+	}
+	return err
 }
 
 func (tg *Telegram) onPhoto(ctx telebot.Context) error {
