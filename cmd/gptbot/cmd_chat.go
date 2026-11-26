@@ -73,7 +73,7 @@ func chatCommand() *cobra.Command {
 
 			var response llmprovider.Response
 			runSpinner(ctx, func() {
-				response, err = g.Generate(ctx, llmprovider.Request{Message: line, ConversationID: conversationID, Model: model})
+				response, err = g.Generate(ctx, llmprovider.Request{Message: line, ConversationID: conversationID, Model: model}, nil)
 			})
 
 			if err != nil {

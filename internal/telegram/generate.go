@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"html"
 	"strings"
-	"time"
 
 	"github.com/kapitanov/gptbot/internal/llmprovider"
 	"github.com/kapitanov/gptbot/internal/telegram/texts"
@@ -75,9 +74,13 @@ func (tg *Telegram) generateE(msg *telebot.Message, request string) error {
 		return err
 	}
 
-	stopThinking := tg.withThinkingMsg(msg)
-	response, err := tg.llm.Generate(context.Background(), llmprovider.Request{Message: request, ConversationID: conversationID, Model: model})
-	stopThinking()
+	draft := newDraftStream(tg.bot, msg)
+	response, err := tg.llm.Generate(
+		context.Background(),
+		llmprovider.Request{Message: request, ConversationID: conversationID, Model: model},
+		draft.Append,
+	)
+	draft.Close()
 
 	if err != nil {
 		return err
@@ -164,45 +167,4 @@ func plural(n int) string {
 		return ""
 	}
 	return "es"
-}
-
-func (tg *Telegram) withThinkingMsg(msg *telebot.Message) func() {
-	done := make(chan struct{})
-	ctx, cancel := context.WithCancel(context.Background())
-
-	go func() {
-		defer close(done)
-
-		const draftID = 1
-		thinking := &telebot.InputRichMessage{
-			HTML: fmt.Sprintf(`<tg-thinking>%s</tg-thinking>`, html.EscapeString(texts.Thinking)),
-		}
-		err := tg.bot.SendRichDraft(msg.Sender, draftID, thinking)
-		if err != nil {
-			log.Error().Err(err).
-				Str("username", msg.Sender.Username).
-				Int("msg", msg.ID).
-				Msg("failed to send draft")
-		}
-
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-time.After(10 * time.Second):
-				err := tg.bot.SendRichDraft(msg.Sender, draftID, thinking)
-				if err != nil {
-					log.Error().Err(err).
-						Str("username", msg.Sender.Username).
-						Int("msg", msg.ID).
-						Msg("failed to send draft")
-				}
-			}
-		}
-	}()
-
-	return func() {
-		cancel()
-		<-done
-	}
 }

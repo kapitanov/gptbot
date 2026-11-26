@@ -77,15 +77,41 @@ func (llm *openAIProvider) DefaultModel() string {
 }
 
 // Generate generates a new message from the input request.
-func (llm *openAIProvider) Generate(ctx context.Context, req Request) (Response, error) {
+func (llm *openAIProvider) Generate(ctx context.Context, req Request, onDelta DeltaHandler) (Response, error) {
 	request, err := llm.prepareRequest(req)
 	if err != nil {
 		return Response{}, err
 	}
 
-	response, err := llm.client.Responses.New(ctx, request)
-	if err != nil {
+	stream := llm.client.Responses.NewStreaming(ctx, request)
+	defer func() { _ = stream.Close() }()
+
+	var response *responses.Response
+	for stream.Next() {
+		event := stream.Current()
+
+		switch event.Type {
+		case "response.output_text.delta":
+			if onDelta != nil && event.Delta != "" {
+				onDelta(event.Delta)
+			}
+		case "response.completed", "response.failed", "response.incomplete":
+			// These are terminal events carrying the final response object.
+			// Incomplete and failed responses are returned as-is, matching
+			// the non-streaming API behaviour.
+			completed := event.Response
+			response = &completed
+		case "error":
+			return Response{}, fmt.Errorf("llm stream error: %s", event.Message)
+		}
+	}
+
+	if err = stream.Err(); err != nil {
 		return Response{}, err
+	}
+
+	if response == nil {
+		return Response{}, fmt.Errorf("llm stream ended without a completed response")
 	}
 
 	r := Response{
