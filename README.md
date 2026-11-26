@@ -55,6 +55,13 @@ This bot is configured via env variables:
 | `GPTBOT_LLM_PROMPT`    | Required     | Path to the prompt file                                                                                         |
 | `GPTBOT_STORAGE_DIR`   | Required     | Path to message history directory                                                                               |
 | `GPTBOT_LLM_REASONING` | `minimal`    | Reasoning effort for the LLM (`none`, `minimal`, `low`, `medium`, `high`, `xhigh`)                              |
+| `GPTBOT_LLM_STREAMING` | `false`      | Enable streaming LLM responses and live Telegram drafts (`true`/`false`)                                        |
+
+## Streaming
+
+Set `GPTBOT_LLM_STREAMING=true` to stream the LLM response into the chat while it is being generated.
+The bot shows the partial answer through an ephemeral rich-message draft and, once generation finishes,
+posts exactly one formatted message with the complete answer. Streaming is disabled by default.
 
 ## Model selection
 

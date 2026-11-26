@@ -51,8 +51,9 @@ type Provider interface {
 	DefaultModel() string
 
 	// Generate generates a new message from the input request.
-	// When onDelta is not nil, text fragments are passed to it as they arrive;
-	// the returned Response always contains the complete result.
+	// When streaming is enabled and onDelta is not nil, text fragments are
+	// passed to it as they arrive; the returned Response always contains the
+	// complete result.
 	Generate(ctx context.Context, req Request, onDelta DeltaHandler) (Response, error)
 }
 
@@ -100,6 +101,7 @@ type Parameters struct {
 	PromptFilePath  string          // System prompt file path.
 	History         History         // Conversation history storage.
 	EnableTracing   bool            // Enable request/response tracing.
+	EnableStreaming bool            // Enable streaming responses.
 	ReasoningEffort ReasoningEffort // Reasoning effort.
 }
 

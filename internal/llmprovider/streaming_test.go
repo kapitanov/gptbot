@@ -52,9 +52,9 @@ func sseResponse(events ...string) string {
 	return b.String()
 }
 
-func TestOpenAIProviderStreamsText(t *testing.T) {
-	const completedResponse = `{"id":"resp_1","object":"response","created_at":100,"completed_at":102,"model":"gpt-test","output":[{"type":"message","id":"msg_1","role":"assistant","status":"completed","content":[{"type":"output_text","text":"Hello"}]}],"usage":{"input_tokens":3,"output_tokens":2,"total_tokens":5}}`
+const openAICompletedResponseJSON = `{"id":"resp_1","object":"response","created_at":100,"completed_at":102,"model":"gpt-test","output":[{"type":"message","id":"msg_1","role":"assistant","status":"completed","content":[{"type":"output_text","text":"Hello"}]}],"usage":{"input_tokens":3,"output_tokens":2,"total_tokens":5}}`
 
+func TestOpenAIProviderStreamsText(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/responses" {
 			t.Errorf("unexpected path %q", r.URL.Path)
@@ -72,7 +72,7 @@ func TestOpenAIProviderStreamsText(t *testing.T) {
 		_, _ = io.WriteString(w, sseResponse(
 			`{"type":"response.output_text.delta","sequence_number":1,"item_id":"msg_1","output_index":0,"content_index":0,"delta":"Hel"}`,
 			`{"type":"response.output_text.delta","sequence_number":2,"item_id":"msg_1","output_index":0,"content_index":0,"delta":"lo"}`,
-			`{"type":"response.completed","sequence_number":3,"response":`+completedResponse+`}`,
+			`{"type":"response.completed","sequence_number":3,"response":`+openAICompletedResponseJSON+`}`,
 		))
 	}))
 	defer server.Close()
@@ -83,6 +83,7 @@ func TestOpenAIProviderStreamsText(t *testing.T) {
 		models:          []string{"gpt-test"},
 		promptFilePath:  writePrompt(t),
 		history:         history,
+		enableStreaming: true,
 		reasoningEffort: DefaultReasoningEffort,
 	}
 
@@ -138,6 +139,7 @@ func TestOpenAIProviderRequiresCompletedResponse(t *testing.T) {
 		models:          []string{"gpt-test"},
 		promptFilePath:  writePrompt(t),
 		history:         &recordingHistory{},
+		enableStreaming: true,
 		reasoningEffort: DefaultReasoningEffort,
 	}
 
@@ -163,6 +165,7 @@ func TestOpenAIProviderFailsOnFailedResponse(t *testing.T) {
 		models:          []string{"gpt-test"},
 		promptFilePath:  writePrompt(t),
 		history:         history,
+		enableStreaming: true,
 		reasoningEffort: DefaultReasoningEffort,
 	}
 
@@ -195,6 +198,7 @@ func TestOpenAIProviderHandlesIncompleteResponse(t *testing.T) {
 		models:          []string{"gpt-test"},
 		promptFilePath:  writePrompt(t),
 		history:         history,
+		enableStreaming: true,
 		reasoningEffort: DefaultReasoningEffort,
 	}
 
@@ -233,6 +237,7 @@ func TestOpenRouterProviderFailsOnIncompleteStream(t *testing.T) {
 		models:          []string{"test/model"},
 		promptFilePath:  writePrompt(t),
 		history:         history,
+		enableStreaming: true,
 		reasoningEffort: "low",
 	}
 
@@ -280,6 +285,7 @@ func TestOpenRouterProviderStreamsTextAndStats(t *testing.T) {
 		models:          []string{"test/model"},
 		promptFilePath:  writePrompt(t),
 		history:         history,
+		enableStreaming: true,
 		reasoningEffort: "low",
 	}
 
@@ -324,6 +330,141 @@ func TestOpenRouterProviderStreamsTextAndStats(t *testing.T) {
 		t.Fatalf("Citations = %#v, want 2 citations", response.Citations)
 	}
 	if response.Citations[0].URL != "https://example.com/one" || response.Citations[1].URL != "https://example.com/two" {
+		t.Fatalf("Citations = %#v", response.Citations)
+	}
+	if response.Duration <= 0 {
+		t.Fatalf("Duration = %s, want > 0", response.Duration)
+	}
+
+	wantHistory := []Message{
+		{Participant: ParticipantUser, Text: "hi"},
+		{Participant: ParticipantAssistant, Text: "Hello"},
+	}
+	if !reflect.DeepEqual(history.messages, wantHistory) {
+		t.Fatalf("history = %#v, want %#v", history.messages, wantHistory)
+	}
+}
+
+func TestOpenAIProviderNonStreaming(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/responses" {
+			t.Errorf("unexpected path %q", r.URL.Path)
+		}
+
+		var body map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Errorf("failed to decode request body: %v", err)
+		}
+		if stream, ok := body["stream"]; ok && stream != false {
+			t.Errorf("stream = %v, want false or absent", stream)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, openAICompletedResponseJSON)
+	}))
+	defer server.Close()
+
+	history := &recordingHistory{}
+	llm := &openAIProvider{
+		client:          openai.NewClient(option.WithBaseURL(server.URL), option.WithAPIKey("test")),
+		models:          []string{"gpt-test"},
+		promptFilePath:  writePrompt(t),
+		history:         history,
+		reasoningEffort: DefaultReasoningEffort,
+	}
+
+	deltas := 0
+	response, err := llm.Generate(
+		context.Background(),
+		Request{Message: "hi", ConversationID: "conversation"},
+		func(string) { deltas++ },
+	)
+	if err != nil {
+		t.Fatalf("Generate() error = %v", err)
+	}
+	if deltas != 0 {
+		t.Fatalf("delta calls = %d, want 0 with streaming disabled", deltas)
+	}
+	if response.Text != "Hello" {
+		t.Fatalf("Text = %q, want %q", response.Text, "Hello")
+	}
+	if want := (Usage{PromptTokens: 3, CompletionTokens: 2, TotalTokens: 5}); response.Usage != want {
+		t.Fatalf("Usage = %#v, want %#v", response.Usage, want)
+	}
+	if response.Duration != 2*time.Second {
+		t.Fatalf("Duration = %s, want 2s", response.Duration)
+	}
+
+	wantHistory := []Message{
+		{Participant: ParticipantUser, Text: "hi"},
+		{Participant: ParticipantAssistant, Text: "Hello"},
+	}
+	if !reflect.DeepEqual(history.messages, wantHistory) {
+		t.Fatalf("history = %#v, want %#v", history.messages, wantHistory)
+	}
+}
+
+func TestOpenRouterProviderNonStreaming(t *testing.T) {
+	const completionResponse = `{"id":"gen-1","object":"chat.completion","created":100,"model":"test/model","choices":[{"index":0,"message":{"role":"assistant","content":"Hello","reasoning":" because","annotations":[{"type":"url_citation","url_citation":{"url":"https://example.com/one","title":"One","content":"first"}}]},"finish_reason":"stop"}],"usage":{"prompt_tokens":10,"completion_tokens":4,"total_tokens":14,"cost":0.0012,"server_tool_use_details":{"tool_calls_requested":1,"tool_calls_executed":1,"web_search_requests":1}}}`
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/chat/completions" {
+			t.Errorf("unexpected path %q", r.URL.Path)
+		}
+
+		var body map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Errorf("failed to decode request body: %v", err)
+		}
+		if stream, ok := body["stream"]; ok && stream != false {
+			t.Errorf("stream = %v, want false or absent", stream)
+		}
+		if _, ok := body["tools"]; !ok {
+			t.Error("request does not enable server side tools")
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, completionResponse)
+	}))
+	defer server.Close()
+
+	history := &recordingHistory{}
+	llm := &openRouterProvider{
+		client:          openai.NewClient(option.WithBaseURL(server.URL)),
+		models:          []string{"test/model"},
+		promptFilePath:  writePrompt(t),
+		history:         history,
+		reasoningEffort: "low",
+	}
+
+	deltas := 0
+	response, err := llm.Generate(
+		context.Background(),
+		Request{Message: "hi", ConversationID: "conversation"},
+		func(string) { deltas++ },
+	)
+	if err != nil {
+		t.Fatalf("Generate() error = %v", err)
+	}
+	if deltas != 0 {
+		t.Fatalf("delta calls = %d, want 0 with streaming disabled", deltas)
+	}
+	if response.Text != "Hello" {
+		t.Fatalf("Text = %q, want %q", response.Text, "Hello")
+	}
+	if response.Reasoning != " because" {
+		t.Fatalf("Reasoning = %q, want %q", response.Reasoning, " because")
+	}
+	if want := (Usage{PromptTokens: 10, CompletionTokens: 4, TotalTokens: 14}); response.Usage != want {
+		t.Fatalf("Usage = %#v, want %#v", response.Usage, want)
+	}
+	if math.Abs(response.TotalPrice-0.0012) > 1e-12 {
+		t.Fatalf("TotalPrice = %v, want 0.0012", response.TotalPrice)
+	}
+	if want := (ServerToolUsage{ToolCallsRequested: 1, ToolCallsExecuted: 1, WebSearchRequests: 1}); response.ServerToolUsage != want {
+		t.Fatalf("ServerToolUsage = %#v, want %#v", response.ServerToolUsage, want)
+	}
+	if len(response.Citations) != 1 || response.Citations[0].URL != "https://example.com/one" {
 		t.Fatalf("Citations = %#v", response.Citations)
 	}
 	if response.Duration <= 0 {
