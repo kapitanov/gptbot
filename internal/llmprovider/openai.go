@@ -95,12 +95,15 @@ func (llm *openAIProvider) Generate(ctx context.Context, req Request, onDelta De
 			if onDelta != nil && event.Delta != "" {
 				onDelta(event.Delta)
 			}
-		case "response.completed", "response.failed", "response.incomplete":
+		case "response.completed", "response.incomplete":
 			// These are terminal events carrying the final response object.
-			// Incomplete and failed responses are returned as-is, matching
-			// the non-streaming API behaviour.
+			// Incomplete responses are returned as-is, matching the
+			// non-streaming API behaviour.
 			completed := event.Response
 			response = &completed
+		case "response.failed":
+			return Response{}, fmt.Errorf("llm response failed: %s (code %s)",
+				event.Response.Error.Message, event.Response.Error.Code)
 		case "error":
 			return Response{}, fmt.Errorf("llm stream error: %s", event.Message)
 		}

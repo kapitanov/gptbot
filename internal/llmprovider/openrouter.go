@@ -117,6 +117,7 @@ func (p *openRouterProvider) Generate(ctx context.Context, req Request, onDelta 
 		serverToolUsage ServerToolUsage
 		citations       []Citation
 		citationKeys    = make(map[string]bool)
+		usageReceived   bool
 	)
 
 	for stream.Next() {
@@ -152,6 +153,7 @@ func (p *openRouterProvider) Generate(ctx context.Context, req Request, onDelta 
 			}
 
 			if extras.Usage != nil {
+				usageReceived = true
 				usage = Usage{
 					PromptTokens:     extras.Usage.PromptTokens,
 					CompletionTokens: extras.Usage.CompletionTokens,
@@ -180,6 +182,10 @@ func (p *openRouterProvider) Generate(ctx context.Context, req Request, onDelta 
 
 	if err = stream.Err(); err != nil {
 		return Response{}, err
+	}
+
+	if !usageReceived {
+		return Response{}, fmt.Errorf("llm stream ended without the final usage chunk")
 	}
 
 	r := Response{

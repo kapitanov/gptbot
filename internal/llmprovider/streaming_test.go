@@ -147,6 +147,64 @@ func TestOpenAIProviderRequiresCompletedResponse(t *testing.T) {
 	}
 }
 
+func TestOpenAIProviderFailsOnFailedResponse(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = io.WriteString(w, sseResponse(
+			`{"type":"response.output_text.delta","sequence_number":1,"item_id":"msg_1","output_index":0,"content_index":0,"delta":"Par"}`,
+			`{"type":"response.failed","sequence_number":2,"response":{"id":"resp_failed","object":"response","created_at":100,"model":"gpt-test","status":"failed","output":[],"usage":null,"error":{"code":"server_error","message":"upstream exploded"}}}`,
+		))
+	}))
+	defer server.Close()
+
+	history := &recordingHistory{}
+	llm := &openAIProvider{
+		client:          openai.NewClient(option.WithBaseURL(server.URL), option.WithAPIKey("test")),
+		models:          []string{"gpt-test"},
+		promptFilePath:  writePrompt(t),
+		history:         history,
+		reasoningEffort: DefaultReasoningEffort,
+	}
+
+	_, err := llm.Generate(context.Background(), Request{Message: "hi", ConversationID: "conversation"}, nil)
+	if err == nil {
+		t.Fatal("Generate() error = nil, want an error")
+	}
+	if !strings.Contains(err.Error(), "upstream exploded") {
+		t.Fatalf("Generate() error = %q, want it to contain %q", err, "upstream exploded")
+	}
+	if len(history.messages) != 0 {
+		t.Fatalf("history = %#v, want no messages on failure", history.messages)
+	}
+}
+
+func TestOpenRouterProviderFailsOnIncompleteStream(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = io.WriteString(w, sseResponse(
+			`{"id":"gen-1","object":"chat.completion.chunk","created":100,"model":"test/model","choices":[{"index":0,"delta":{"role":"assistant","content":"Par"}}]}`,
+		))
+	}))
+	defer server.Close()
+
+	history := &recordingHistory{}
+	llm := &openRouterProvider{
+		client:          openai.NewClient(option.WithBaseURL(server.URL)),
+		models:          []string{"test/model"},
+		promptFilePath:  writePrompt(t),
+		history:         history,
+		reasoningEffort: "low",
+	}
+
+	_, err := llm.Generate(context.Background(), Request{Message: "hi", ConversationID: "conversation"}, nil)
+	if err == nil {
+		t.Fatal("Generate() error = nil, want an error")
+	}
+	if len(history.messages) != 0 {
+		t.Fatalf("history = %#v, want no messages on failure", history.messages)
+	}
+}
+
 func TestOpenRouterProviderStreamsTextAndStats(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/chat/completions" {
