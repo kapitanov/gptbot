@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/openai/openai-go/v3"
@@ -42,6 +43,7 @@ type openRouterProvider struct {
 	promptFilePath  string
 	history         History
 	enableTracing   bool
+	enableStreaming bool
 	reasoningEffort ReasoningEffort
 }
 
@@ -68,6 +70,7 @@ func newOpenRouterProvider(parameters Parameters) (*openRouterProvider, error) {
 		Strs("models", models).
 		Str("prompt", parameters.PromptFilePath).
 		Str("reasoning", string(parameters.ReasoningEffort)).
+		Bool("streaming", parameters.EnableStreaming).
 		Msg("llm client configuration")
 
 	_, err := client.Models.List(context.Background())
@@ -81,6 +84,7 @@ func newOpenRouterProvider(parameters Parameters) (*openRouterProvider, error) {
 		promptFilePath:  parameters.PromptFilePath,
 		history:         parameters.History,
 		enableTracing:   parameters.EnableTracing,
+		enableStreaming: parameters.EnableStreaming,
 		reasoningEffort: parameters.ReasoningEffort,
 	}, nil
 }
@@ -96,19 +100,69 @@ func (p *openRouterProvider) DefaultModel() string {
 }
 
 // Generate generates a new message from the input request.
-func (p *openRouterProvider) Generate(ctx context.Context, req Request) (Response, error) {
+func (p *openRouterProvider) Generate(ctx context.Context, req Request, onDelta DeltaHandler) (Response, error) {
 	request, err := p.prepareRequest(req)
 	if err != nil {
 		return Response{}, err
 	}
 
 	started := time.Now()
+
+	var response Response
+	if p.enableStreaming {
+		response, err = p.generateStreaming(ctx, request, onDelta, started)
+	} else {
+		response, err = p.generate(ctx, request, started)
+	}
+	if err != nil {
+		return Response{}, err
+	}
+
+	if err = p.updateHistory(req, response); err != nil {
+		return Response{}, err
+	}
+
+	p.trace(request, response)
+
+	log.Info().
+		Str("id", response.ID).
+		Str("model", response.Model).
+		Int64("tokens", response.TotalTokens).
+		Str("reasoning", string(response.ReasoningEffort)).
+		Float64("price", response.TotalPrice).
+		Dur("duration", response.Duration).
+		Msg("llm stats")
+
+	// Server tools run inside OpenRouter's agent loop, so search queries are not
+	// reported back. Infer what was searched from the returned web citations.
+	if len(response.Citations) > 0 || response.ServerToolUsage.WebSearchRequests > 0 {
+		citations := make([]string, 0, len(response.Citations))
+		for _, c := range response.Citations {
+			citations = append(citations, c.URL)
+		}
+
+		log.Info().
+			Int("web_searches", response.ServerToolUsage.WebSearchRequests).
+			Int("tool_calls", response.ServerToolUsage.ToolCallsExecuted).
+			Strs("citations", citations).
+			Msg("server tool usage")
+	}
+
+	return response, nil
+}
+
+// generate performs a non-streaming request.
+func (p *openRouterProvider) generate(
+	ctx context.Context,
+	request openai.ChatCompletionNewParams,
+	started time.Time,
+) (Response, error) {
 	response, err := p.client.Chat.Completions.New(ctx, request, openRouterServerToolsOption())
 	if err != nil {
 		return Response{}, err
 	}
 
-	r := Response{
+	return Response{
 		ID:        response.ID,
 		Text:      completionText(response),
 		Reasoning: completionReasoning(response),
@@ -124,39 +178,113 @@ func (p *openRouterProvider) Generate(ctx context.Context, req Request) (Respons
 		Duration:        time.Since(started),
 		ServerToolUsage: completionServerToolUsage(response),
 		Citations:       completionCitations(response),
+	}, nil
+}
+
+// generateStreaming performs a streaming request and assembles the full response.
+func (p *openRouterProvider) generateStreaming(
+	ctx context.Context,
+	request openai.ChatCompletionNewParams,
+	onDelta DeltaHandler,
+	started time.Time,
+) (Response, error) {
+	stream := p.client.Chat.Completions.NewStreaming(ctx, request, openRouterServerToolsOption())
+	defer func() { _ = stream.Close() }()
+
+	var (
+		id              string
+		model           string
+		text            strings.Builder
+		reasoning       strings.Builder
+		usage           Usage
+		totalPrice      float64
+		serverToolUsage ServerToolUsage
+		citations       []Citation
+		citationKeys    = make(map[string]bool)
+		usageReceived   bool
+	)
+
+	for stream.Next() {
+		chunk := stream.Current()
+
+		if chunk.ID != "" {
+			id = chunk.ID
+		}
+		if chunk.Model != "" {
+			model = chunk.Model
+		}
+
+		var extras streamChunkExtras
+		if err := json.Unmarshal([]byte(chunk.RawJSON()), &extras); err == nil {
+			if len(extras.Choices) > 0 {
+				choice := extras.Choices[0]
+				reasoning.WriteString(choice.Delta.Reasoning)
+
+				for _, annotation := range append(choice.Delta.Annotations, choice.Annotations...) {
+					citation, ok := annotation.citation()
+					if !ok {
+						continue
+					}
+
+					key := citation.URL + "\x00" + citation.Title
+					if citationKeys[key] {
+						continue
+					}
+
+					citationKeys[key] = true
+					citations = append(citations, citation)
+				}
+			}
+
+			if extras.Usage != nil {
+				usageReceived = true
+				usage = Usage{
+					PromptTokens:     extras.Usage.PromptTokens,
+					CompletionTokens: extras.Usage.CompletionTokens,
+					TotalTokens:      extras.Usage.TotalTokens,
+				}
+				totalPrice = extras.Usage.Cost
+				serverToolUsage = ServerToolUsage{
+					ToolCallsRequested: extras.Usage.ServerToolUseDetails.ToolCallsRequested,
+					ToolCallsExecuted:  extras.Usage.ServerToolUseDetails.ToolCallsExecuted,
+					WebSearchRequests:  extras.Usage.ServerToolUseDetails.WebSearchRequests,
+				}
+			}
+		}
+
+		for _, choice := range chunk.Choices {
+			if choice.Index != 0 || choice.Delta.Content == "" {
+				continue
+			}
+
+			text.WriteString(choice.Delta.Content)
+			if onDelta != nil {
+				onDelta(choice.Delta.Content)
+			}
+		}
 	}
 
-	if err = p.updateHistory(req, r); err != nil {
+	if err := stream.Err(); err != nil {
 		return Response{}, err
 	}
 
-	p.trace(request, response)
-
-	log.Info().
-		Str("id", r.ID).
-		Str("model", r.Model).
-		Int64("tokens", r.TotalTokens).
-		Str("reasoning", string(r.ReasoningEffort)).
-		Float64("price", r.TotalPrice).
-		Dur("duration", r.Duration).
-		Msg("llm stats")
-
-	// Server tools run inside OpenRouter's agent loop, so search queries are not
-	// reported back. Infer what was searched from the returned web citations.
-	if len(r.Citations) > 0 || r.ServerToolUsage.WebSearchRequests > 0 {
-		citations := make([]string, 0, len(r.Citations))
-		for _, c := range r.Citations {
-			citations = append(citations, c.URL)
-		}
-
-		log.Info().
-			Int("web_searches", r.ServerToolUsage.WebSearchRequests).
-			Int("tool_calls", r.ServerToolUsage.ToolCallsExecuted).
-			Strs("citations", citations).
-			Msg("server tool usage")
+	if !usageReceived {
+		return Response{}, fmt.Errorf("llm stream ended without the final usage chunk")
 	}
 
-	return r, nil
+	return Response{
+		ID:              id,
+		Text:            text.String(),
+		Reasoning:       reasoning.String(),
+		Usage:           usage,
+		Model:           model,
+		TotalTokens:     usage.TotalTokens,
+		ReasoningEffort: p.reasoningEffort,
+		TotalPrice:      totalPrice,
+		Duration:        time.Since(started),
+		ServerToolUsage: serverToolUsage,
+		Citations:       citations,
+	}, nil
 }
 
 func (p *openRouterProvider) prepareRequest(request Request) (openai.ChatCompletionNewParams, error) {
@@ -234,7 +362,6 @@ func completionReasoning(response *openai.ChatCompletion) string {
 	if err := json.Unmarshal([]byte(response.RawJSON()), &raw); err != nil {
 		return ""
 	}
-
 	if len(raw.Choices) == 0 {
 		return ""
 	}
@@ -289,14 +416,7 @@ func completionCitations(response *openai.ChatCompletion) []Citation {
 	var raw struct {
 		Choices []struct {
 			Message struct {
-				Annotations []struct {
-					Type        string `json:"type"`
-					URLCitation struct {
-						URL     string `json:"url"`
-						Title   string `json:"title"`
-						Content string `json:"content"`
-					} `json:"url_citation"`
-				} `json:"annotations"`
+				Annotations []chatCompletionAnnotation `json:"annotations"`
 			} `json:"message"`
 		} `json:"choices"`
 	}
@@ -309,15 +429,10 @@ func completionCitations(response *openai.ChatCompletion) []Citation {
 	}
 
 	var citations []Citation
-	for _, a := range raw.Choices[0].Message.Annotations {
-		if a.Type != "url_citation" || a.URLCitation.URL == "" {
-			continue
+	for _, annotation := range raw.Choices[0].Message.Annotations {
+		if citation, ok := annotation.citation(); ok {
+			citations = append(citations, citation)
 		}
-		citations = append(citations, Citation{
-			URL:     a.URLCitation.URL,
-			Title:   a.URLCitation.Title,
-			Content: a.URLCitation.Content,
-		})
 	}
 
 	return citations
@@ -331,13 +446,61 @@ func completionText(response *openai.ChatCompletion) string {
 	return response.Choices[0].Message.Content
 }
 
-func (p *openRouterProvider) trace(request openai.ChatCompletionNewParams, response *openai.ChatCompletion) {
+// streamChunkExtras holds OpenRouter specific fields of a streamed chunk.
+// They are not part of the standard Chat Completions chunk schema.
+type streamChunkExtras struct {
+	Choices []struct {
+		Annotations []chatCompletionAnnotation `json:"annotations"`
+		Delta       struct {
+			Reasoning   string                     `json:"reasoning"`
+			Annotations []chatCompletionAnnotation `json:"annotations"`
+		} `json:"delta"`
+	} `json:"choices"`
+	Usage *struct {
+		PromptTokens         int64   `json:"prompt_tokens"`
+		CompletionTokens     int64   `json:"completion_tokens"`
+		TotalTokens          int64   `json:"total_tokens"`
+		Cost                 float64 `json:"cost"`
+		ServerToolUseDetails struct {
+			ToolCallsRequested int `json:"tool_calls_requested"`
+			ToolCallsExecuted  int `json:"tool_calls_executed"`
+			WebSearchRequests  int `json:"web_search_requests"`
+		} `json:"server_tool_use_details"`
+	} `json:"usage"`
+}
+
+// chatCompletionAnnotation is a web citation produced by a server side tool.
+// OpenRouter standardizes its web search/fetch results into "url_citation"
+// annotations of the message.
+type chatCompletionAnnotation struct {
+	Type        string `json:"type"`
+	URLCitation struct {
+		URL     string `json:"url"`
+		Title   string `json:"title"`
+		Content string `json:"content"`
+	} `json:"url_citation"`
+}
+
+// citation converts the annotation to a Citation.
+func (a chatCompletionAnnotation) citation() (Citation, bool) {
+	if a.Type != "url_citation" || a.URLCitation.URL == "" {
+		return Citation{}, false
+	}
+
+	return Citation{
+		URL:     a.URLCitation.URL,
+		Title:   a.URLCitation.Title,
+		Content: a.URLCitation.Content,
+	}, true
+}
+
+func (p *openRouterProvider) trace(request openai.ChatCompletionNewParams, response Response) {
 	if !p.enableTracing {
 		return
 	}
 
 	requestJSON := formatJSON(request)
-	responseJSON := prettifyJSON([]byte(response.RawJSON()))
+	responseJSON, _ := json.MarshalIndent(response, "", "  ")
 
 	_, _ = fmt.Fprintf(os.Stdout, "REQUEST:\n%s\nRESPONSE:\n%s\n\n", requestJSON, responseJSON)
 }

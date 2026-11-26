@@ -3,8 +3,10 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"time"
 
@@ -55,6 +57,22 @@ func main() {
 	}
 }
 
+// envBool reads a boolean environment variable.
+// An unset or empty variable is false; invalid values are rejected.
+func envBool(name string) (bool, error) {
+	value := strings.TrimSpace(os.Getenv(name))
+	if value == "" {
+		return false, nil
+	}
+
+	enabled, err := strconv.ParseBool(value)
+	if err != nil {
+		return false, fmt.Errorf("%s must be a boolean: %w", name, err)
+	}
+
+	return enabled, nil
+}
+
 func withLLMProvider(cmd *cobra.Command) func(history llmprovider.History) (llmprovider.Provider, error) {
 	var llmProvider, llmURL, llmToken, llmModel, llmPromptFilePath, llmReasoningEffort string
 	cmd.Flags().StringVar(&llmProvider, "llm-provider", "", "LLM provider name: \"openai\" or \"openrouter\" (default from $GPTBOT_LLM_PROVIDER or $LLM_PROVIDER, or \"openai\")")
@@ -102,6 +120,11 @@ func withLLMProvider(cmd *cobra.Command) func(history llmprovider.History) (llmp
 			}
 		}
 
+		enableStreaming, err := envBool("GPTBOT_LLM_STREAMING")
+		if err != nil {
+			return nil, err
+		}
+
 		llm, err := llmprovider.New(llmprovider.Parameters{
 			Provider:        llmprovider.ProviderType(llmProvider),
 			URL:             llmURL,
@@ -110,6 +133,7 @@ func withLLMProvider(cmd *cobra.Command) func(history llmprovider.History) (llmp
 			PromptFilePath:  llmPromptFilePath,
 			History:         history,
 			EnableTracing:   os.Getenv("GPTBOT_LLM_TRACE") != "",
+			EnableStreaming: enableStreaming,
 			ReasoningEffort: llmprovider.ReasoningEffort(llmReasoningEffort),
 		})
 		if err != nil {

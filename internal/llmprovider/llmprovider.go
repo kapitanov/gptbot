@@ -37,6 +37,11 @@ const DefaultReasoningEffort ReasoningEffort = "minimal"
 // MaxConversationDepth limits conversation depth.
 const MaxConversationDepth = 5
 
+// DeltaHandler receives incremental text fragments of a streamed response.
+// The handler is called synchronously as fragments arrive and must return
+// quickly; a nil handler discards the fragments.
+type DeltaHandler func(delta string)
+
 // Provider is a provider-agnostic LLM client.
 type Provider interface {
 	// Models returns the list of available model names.
@@ -46,7 +51,10 @@ type Provider interface {
 	DefaultModel() string
 
 	// Generate generates a new message from the input request.
-	Generate(ctx context.Context, req Request) (Response, error)
+	// When streaming is enabled and onDelta is not nil, text fragments are
+	// passed to it as they arrive; the returned Response always contains the
+	// complete result.
+	Generate(ctx context.Context, req Request, onDelta DeltaHandler) (Response, error)
 }
 
 // ParseModels parses a comma-separated list of model names.
@@ -93,6 +101,7 @@ type Parameters struct {
 	PromptFilePath  string          // System prompt file path.
 	History         History         // Conversation history storage.
 	EnableTracing   bool            // Enable request/response tracing.
+	EnableStreaming bool            // Enable streaming responses.
 	ReasoningEffort ReasoningEffort // Reasoning effort.
 }
 

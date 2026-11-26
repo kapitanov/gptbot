@@ -24,6 +24,7 @@ type openAIProvider struct {
 	promptFilePath  string
 	history         History
 	enableTracing   bool
+	enableStreaming bool
 	reasoningEffort ReasoningEffort
 }
 
@@ -49,6 +50,7 @@ func newOpenAIProvider(parameters Parameters) (*openAIProvider, error) {
 		Strs("models", models).
 		Str("prompt", parameters.PromptFilePath).
 		Str("reasoning", string(parameters.ReasoningEffort)).
+		Bool("streaming", parameters.EnableStreaming).
 		Msg("llm client configuration")
 
 	_, err := client.Models.List(context.Background())
@@ -62,6 +64,7 @@ func newOpenAIProvider(parameters Parameters) (*openAIProvider, error) {
 		promptFilePath:  parameters.PromptFilePath,
 		history:         parameters.History,
 		enableTracing:   parameters.EnableTracing,
+		enableStreaming: parameters.EnableStreaming,
 		reasoningEffort: ReasoningEffort(parameters.ReasoningEffort),
 	}, nil
 }
@@ -77,15 +80,71 @@ func (llm *openAIProvider) DefaultModel() string {
 }
 
 // Generate generates a new message from the input request.
-func (llm *openAIProvider) Generate(ctx context.Context, req Request) (Response, error) {
+func (llm *openAIProvider) Generate(ctx context.Context, req Request, onDelta DeltaHandler) (Response, error) {
 	request, err := llm.prepareRequest(req)
 	if err != nil {
 		return Response{}, err
 	}
 
-	response, err := llm.client.Responses.New(ctx, request)
-	if err != nil {
+	started := time.Now()
+
+	if !llm.enableStreaming {
+		response, err := llm.client.Responses.New(ctx, request)
+		if err != nil {
+			return Response{}, err
+		}
+
+		return llm.finalize(req, request, response, started)
+	}
+
+	stream := llm.client.Responses.NewStreaming(ctx, request)
+	defer func() { _ = stream.Close() }()
+
+	var response *responses.Response
+	for stream.Next() {
+		event := stream.Current()
+
+		switch event.Type {
+		case "response.output_text.delta":
+			if onDelta != nil && event.Delta != "" {
+				onDelta(event.Delta)
+			}
+		case "response.completed", "response.incomplete":
+			// These are terminal events carrying the final response object.
+			// Incomplete responses are returned as-is, matching the
+			// non-streaming API behaviour.
+			completed := event.Response
+			response = &completed
+		case "response.failed":
+			return Response{}, fmt.Errorf("llm response failed: %s (code %s)",
+				event.Response.Error.Message, event.Response.Error.Code)
+		case "error":
+			return Response{}, fmt.Errorf("llm stream error: %s", event.Message)
+		}
+	}
+
+	if err = stream.Err(); err != nil {
 		return Response{}, err
+	}
+
+	if response == nil {
+		return Response{}, fmt.Errorf("llm stream ended without a completed response")
+	}
+
+	return llm.finalize(req, request, response, started)
+}
+
+func (llm *openAIProvider) finalize(
+	req Request,
+	request responses.ResponseNewParams,
+	response *responses.Response,
+	started time.Time,
+) (Response, error) {
+	// completed_at is only set for complete responses; fall back to wall clock
+	// time for incomplete ones (e.g. max_output_tokens reached).
+	duration := time.Second * time.Duration(response.CompletedAt-response.CreatedAt)
+	if duration <= 0 {
+		duration = time.Since(started)
 	}
 
 	r := Response{
@@ -100,10 +159,10 @@ func (llm *openAIProvider) Generate(ctx context.Context, req Request) (Response,
 		Model:           response.Model,
 		TotalTokens:     response.Usage.TotalTokens,
 		ReasoningEffort: llm.reasoningEffort,
-		Duration:        time.Second * time.Duration(response.CompletedAt-response.CreatedAt),
+		Duration:        duration,
 	}
 
-	if err = llm.updateHistory(req, request.Input.OfInputItemList, r); err != nil {
+	if err := llm.updateHistory(req, request.Input.OfInputItemList, r); err != nil {
 		return Response{}, err
 	}
 
