@@ -178,6 +178,46 @@ func TestOpenAIProviderFailsOnFailedResponse(t *testing.T) {
 	}
 }
 
+func TestOpenAIProviderHandlesIncompleteResponse(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = io.WriteString(w, sseResponse(
+			`{"type":"response.output_text.delta","sequence_number":1,"item_id":"msg_1","output_index":0,"content_index":0,"delta":"Hel"}`,
+			`{"type":"response.output_text.delta","sequence_number":2,"item_id":"msg_1","output_index":0,"content_index":0,"delta":"lo"}`,
+			`{"type":"response.incomplete","sequence_number":3,"response":{"id":"resp_incomplete","object":"response","created_at":100,"model":"gpt-test","status":"incomplete","output":[{"type":"message","id":"msg_1","role":"assistant","status":"incomplete","content":[{"type":"output_text","text":"Hello"}]}],"usage":{"input_tokens":3,"output_tokens":2,"total_tokens":5}}}`,
+		))
+	}))
+	defer server.Close()
+
+	history := &recordingHistory{}
+	llm := &openAIProvider{
+		client:          openai.NewClient(option.WithBaseURL(server.URL), option.WithAPIKey("test")),
+		models:          []string{"gpt-test"},
+		promptFilePath:  writePrompt(t),
+		history:         history,
+		reasoningEffort: DefaultReasoningEffort,
+	}
+
+	response, err := llm.Generate(context.Background(), Request{Message: "hi", ConversationID: "conversation"}, nil)
+	if err != nil {
+		t.Fatalf("Generate() error = %v", err)
+	}
+	if response.Text != "Hello" {
+		t.Fatalf("Text = %q, want %q", response.Text, "Hello")
+	}
+	if response.Duration <= 0 {
+		t.Fatalf("Duration = %s, want > 0", response.Duration)
+	}
+
+	wantHistory := []Message{
+		{Participant: ParticipantUser, Text: "hi"},
+		{Participant: ParticipantAssistant, Text: "Hello"},
+	}
+	if !reflect.DeepEqual(history.messages, wantHistory) {
+		t.Fatalf("history = %#v, want %#v", history.messages, wantHistory)
+	}
+}
+
 func TestOpenRouterProviderFailsOnIncompleteStream(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")

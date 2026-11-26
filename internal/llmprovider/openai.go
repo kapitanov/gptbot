@@ -83,6 +83,7 @@ func (llm *openAIProvider) Generate(ctx context.Context, req Request, onDelta De
 		return Response{}, err
 	}
 
+	started := time.Now()
 	stream := llm.client.Responses.NewStreaming(ctx, request)
 	defer func() { _ = stream.Close() }()
 
@@ -117,6 +118,13 @@ func (llm *openAIProvider) Generate(ctx context.Context, req Request, onDelta De
 		return Response{}, fmt.Errorf("llm stream ended without a completed response")
 	}
 
+	// completed_at is only set for complete responses; fall back to wall clock
+	// time for incomplete ones (e.g. max_output_tokens reached).
+	duration := time.Second * time.Duration(response.CompletedAt-response.CreatedAt)
+	if duration <= 0 {
+		duration = time.Since(started)
+	}
+
 	r := Response{
 		ID:        response.ID,
 		Text:      response.OutputText(),
@@ -129,7 +137,7 @@ func (llm *openAIProvider) Generate(ctx context.Context, req Request, onDelta De
 		Model:           response.Model,
 		TotalTokens:     response.Usage.TotalTokens,
 		ReasoningEffort: llm.reasoningEffort,
-		Duration:        time.Second * time.Duration(response.CompletedAt-response.CreatedAt),
+		Duration:        duration,
 	}
 
 	if err = llm.updateHistory(req, request.Input.OfInputItemList, r); err != nil {
